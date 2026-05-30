@@ -38,9 +38,13 @@ No external dependencies — pure Node built-ins.
   list prices (Opus / Sonnet / Haiku), shown on the register and in the HUD.
 - **Persistent totals** — session / today / all-time tokens + cost survive
   restarts (`data/stats.json`).
-- **Jackpot leaderboard** of the biggest single-turn token burns, each labelled
-  with a **synopsis of the prompt** that triggered it (captured via a
-  `UserPromptSubmit` hook). New #1s trigger a fanfare + flash.
+- **Jackpot leaderboard** with a **Tokens / Cost toggle** — two boards, the
+  biggest single-turn token burns and the most expensive turns by `$` (they can
+  rank differently). Each entry is labelled with a **synopsis of the prompt**
+  that triggered it (captured via a `UserPromptSubmit` hook, matched strictly by
+  session so a turn only ever shows its own prompt). New #1s trigger a fanfare.
+- **Daily-reset chime** — a gentle chime + banner at local midnight when the
+  "today" total rolls over.
 - **Logged-in user + organization** shown in the header (read from
   `oauthAccount` in `~/.claude-personal/.claude.json`).
 - **Red cop-light siren + buzzer** when Claude Code needs your input/permission
@@ -72,10 +76,17 @@ burst. Click **🔊 enable cha-ching** once (browsers block autoplay audio).
 curl "http://127.0.0.1:4321/burst?tokens=42000"                 # small/medium/big/JACKPOT by amount
 curl "http://127.0.0.1:4321/burst?tokens=90000&model=opus&label=huge+refactor"  # labelled jackpot
 curl "http://127.0.0.1:4321/alert?message=Permission+needed"    # red siren + buzzer
-curl "http://127.0.0.1:4321/stats"                              # JSON of totals + leaderboard
-curl "http://127.0.0.1:4321/reset"                              # wipe totals + leaderboard
+curl "http://127.0.0.1:4321/newday"                             # simulate midnight rollover (chime)
+curl "http://127.0.0.1:4321/stats"                              # JSON of totals + both leaderboards
+curl "http://127.0.0.1:4321/reset"                              # wipe totals + leaderboards
 npm run test:burst 1500
 ```
+
+### Browser URL options
+
+- `http://127.0.0.1:4321/?board=cost` — open straight to the cost leaderboard
+- `http://127.0.0.1:4321/?nogate` — skip the click-to-enable-sound overlay (for
+  an always-on, muted dashboard on a second monitor)
 
 ## Configuration
 
