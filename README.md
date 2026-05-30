@@ -72,17 +72,18 @@ burst. Click **🔊 enable cha-ching** once (browsers block autoplay audio).
 
 ### Launch from anywhere
 
-There's a self-contained launcher at the repo root. Symlink it onto your `PATH`
-once and you can start the register from any directory (it's idempotent — if a
-server is already running it just opens the browser):
+Install the launcher globally with `npm link` (uses the package's `bin`):
 
 ```bash
-ln -sf "$PWD/claude-code-cash-register" ~/.local/bin/claude-code-cash-register
-claude-code-cash-register        # from anywhere
+npm link                         # one time, from the repo
+claude-code-cash-register        # …then run from any directory
+cash-register                    # short alias
 ```
 
-(Use any dir on your `PATH`; `~/.local/bin` is a common one. Or just run
-`./claude-code-cash-register` from the repo.)
+It's idempotent — if a server is already running it just opens the browser
+instead of failing on a port clash. (`npm unlink -g claude-code-cash-register`
+removes it. You can also just run `./claude-code-cash-register` from the repo
+without linking.)
 
 ### Test without spending tokens
 

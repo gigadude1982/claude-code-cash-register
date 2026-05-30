@@ -5,7 +5,8 @@
   "description": "An animated slot-machine cash register that cha-chings every time Claude Code spends tokens.",
   "type": "module",
   "bin": {
-    "cash-register": "server.js"
+    "claude-code-cash-register": "claude-code-cash-register",
+    "cash-register": "claude-code-cash-register"
   },
   "scripts": {
     "start": "node server.js",
