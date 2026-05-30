@@ -189,6 +189,7 @@ function renderBoard(flashTs) {
 function fireBurst(d) {
   const tokens = Math.max(0, Math.round(d.turnTokens || 0));
   if (tokens <= 0) return;
+  stopAlert(); // Claude is generating again → silence any "needs input" alarm
   const turnCost = Number(d.cost) || 0;
 
   const n = coinCount(tokens);
@@ -913,8 +914,9 @@ function playFanfare() {
     tone(f, t + i * 0.1, 0.45, "triangle", 0.22);
   });
 }
-function playBuzzer() {
+function playBuzzer(volScale = 1) {
   if (!audio) return;
+  const peak = 0.45 * clamp(volScale, 0, 1); // escalating loudness
   const t = audio.currentTime;
   // three harsh low buzzes — the "you're needed" klaxon
   for (let k = 0; k < 3; k++) {
@@ -929,8 +931,8 @@ function playBuzzer() {
     lfoGain.gain.value = 0.18;
     lfo.connect(lfoGain).connect(g.gain);
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.linearRampToValueAtTime(0.3, t0 + 0.01);
-    g.gain.setValueAtTime(0.3, t0 + 0.22);
+    g.gain.linearRampToValueAtTime(peak, t0 + 0.01);
+    g.gain.setValueAtTime(peak, t0 + 0.22);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.27);
     o.connect(g).connect(audio.destination);
     o.start(t0);
@@ -964,21 +966,43 @@ function onNewDay(d) {
 }
 
 // ── siren (Claude needs your input) ──────────────────────────────────────────
-let sirenTimer = null;
+// Loops the buzzer every 5s with escalating volume until the prompt is answered.
+// Stop signals: you submit a prompt (UserPromptSubmit → alertstop), Claude
+// resumes (a token burst), any click/keypress, or a ~60s safety cap.
+const ALERT_PERIOD_MS = 5000;
+const ALERT_MAX_ITERS = 12; // ≈60s — never blare forever
+let alertActive = false;
+let alertInterval = null;
+let alertIteration = 0;
+
 function showSiren(d) {
   el.sirenText.textContent = (d.message || "Claude needs your input").toUpperCase();
   el.siren.classList.add("on");
-  playBuzzer();
-  clearTimeout(sirenTimer);
-  sirenTimer = setTimeout(hideSiren, 8000); // auto-clear so it doesn't nag forever
+  if (alertActive) return; // already blaring — just refreshed the message
+  alertActive = true;
+  alertIteration = 0;
+  buzzStep();
+  alertInterval = setInterval(buzzStep, ALERT_PERIOD_MS);
 }
-function hideSiren() {
+function buzzStep() {
+  alertIteration++;
+  // ramp from a soft 0.4 up to full volume over the first ~5 cycles
+  const vol = Math.min(1, 0.4 + 0.15 * (alertIteration - 1));
+  playBuzzer(vol);
+  el.siren.style.setProperty("--siren-intensity", vol.toFixed(2));
+  if (alertIteration >= ALERT_MAX_ITERS) stopAlert();
+}
+function stopAlert() {
+  if (!alertActive && !el.siren.classList.contains("on")) return;
+  alertActive = false;
+  if (alertInterval) clearInterval(alertInterval);
+  alertInterval = null;
   el.siren.classList.remove("on");
-  clearTimeout(sirenTimer);
+  el.siren.style.setProperty("--siren-intensity", "0");
 }
-// any click or key dismisses the siren (you've seen it)
-window.addEventListener("pointerdown", hideSiren);
-window.addEventListener("keydown", hideSiren);
+// any click or key silences it (you've seen it)
+window.addEventListener("pointerdown", stopAlert);
+window.addEventListener("keydown", stopAlert);
 
 // ── SSE wiring ───────────────────────────────────────────────────────────────
 function connect() {
@@ -1011,6 +1035,7 @@ function connect() {
       onNewDay(JSON.parse(e.data));
     } catch {}
   });
+  es.addEventListener("alertstop", () => stopAlert()); // you answered the prompt
   es.onerror = () => {
     el.connDot.classList.remove("live");
   };

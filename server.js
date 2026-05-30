@@ -346,6 +346,8 @@ const server = http.createServer((req, res) => {
         const j = JSON.parse(body);
         setPrompt(j.session || j.session_id, j.text || j.prompt);
       } catch {}
+      // You just answered → silence the escalating "needs input" alarm.
+      broadcast("alertstop", {});
       res.writeHead(204).end();
     });
     return;
@@ -408,6 +410,13 @@ const server = http.createServer((req, res) => {
     } else {
       fire({ message: url.searchParams.get("message") || "Test siren" });
     }
+    return;
+  }
+
+  // Manually silence the alarm (same as answering a prompt).
+  if (url.pathname === "/alertstop") {
+    broadcast("alertstop", {});
+    res.writeHead(200, { "Content-Type": "text/plain" }).end("alarm silenced\n");
     return;
   }
 
