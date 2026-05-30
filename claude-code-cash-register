@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Launcher for the Claude Code Cash Register.
+#
+# Runs from anywhere — resolves its own real location (following symlinks) so it
+# works whether you call ./claude-code-cash-register from the repo or via a
+# symlink on your PATH. If a server is already listening, it just opens the
+# browser instead of failing on a port clash.
+set -euo pipefail
+
+# Resolve the real directory of this script, following symlinks.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+
+PORT="${CASH_REGISTER_PORT:-4321}"
+URL="http://127.0.0.1:${PORT}"
+
+if command -v lsof >/dev/null 2>&1 && lsof -ti ":${PORT}" >/dev/null 2>&1; then
+  echo "💰 Cash register already running at ${URL} — opening browser."
+  [ "$(uname)" = "Darwin" ] && open "$URL" >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "error: 'node' not found on PATH (Node 18+ required)." >&2
+  exit 1
+fi
+
+exec node "$DIR/server.js" "$@"

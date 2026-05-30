@@ -70,6 +70,20 @@ npm start          # starts the server on http://127.0.0.1:4321 and opens your b
 Then just use Claude Code as normal. Every request that spends tokens triggers a
 burst. Click **🔊 enable cha-ching** once (browsers block autoplay audio).
 
+### Launch from anywhere
+
+There's a self-contained launcher at the repo root. Symlink it onto your `PATH`
+once and you can start the register from any directory (it's idempotent — if a
+server is already running it just opens the browser):
+
+```bash
+ln -sf "$PWD/claude-code-cash-register" ~/.local/bin/claude-code-cash-register
+claude-code-cash-register        # from anywhere
+```
+
+(Use any dir on your `PATH`; `~/.local/bin` is a common one. Or just run
+`./claude-code-cash-register` from the repo.)
+
 ### Test without spending tokens
 
 ```bash
