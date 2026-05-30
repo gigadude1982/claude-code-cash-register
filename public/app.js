@@ -36,6 +36,7 @@ function resize() {
   canvas.height = Math.floor(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   seedDust();
+  seedRain();
 }
 window.addEventListener("resize", resize);
 
@@ -44,6 +45,7 @@ const REEL_SYMBOLS = ["🍒", "🪙", "💵", "⭐", "💎", "7️⃣"];
 const coins = [];
 let sparks = [];
 const dust = []; // ambient floating gold motes
+const rain = []; // coins endlessly pouring from the vault ceiling (background)
 
 const state = {
   account: "Claude Code",
@@ -140,6 +142,171 @@ function spawnDustBurst(g, inten) {
       decay: rand(0.004, 0.01),
     });
   }
+}
+
+// ── bank-vault backdrop + coins pouring from the ceiling ─────────────────────
+function resetRainCoin(c, atTop) {
+  const depth = Math.random(); // 0 = far/small/slow, 1 = near/big/fast (parallax)
+  c.x = Math.random() * W;
+  c.y = atTop ? rand(-40, -4) : Math.random() * H;
+  c.r = 4 + depth * 9;
+  c.vy = 1.3 + depth * 3.4;
+  c.vx = rand(-0.3, 0.3);
+  c.rot = rand(0, Math.PI * 2);
+  c.vrot = rand(-0.12, 0.12);
+  c.flip = rand(0, Math.PI * 2);
+  c.vflip = rand(0.05, 0.2);
+  c.alpha = 0.22 + depth * 0.5;
+}
+function seedRain() {
+  rain.length = 0;
+  const count = clamp(Math.round(W / 14), 30, 140);
+  for (let i = 0; i < count; i++) {
+    const c = {};
+    resetRainCoin(c, false);
+    rain.push(c);
+  }
+}
+function goldDisc(x, y, r, flipCos, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  const rx = Math.max(1.2, Math.abs(flipCos) * r);
+  const grd = ctx.createLinearGradient(-rx, -r, rx, r);
+  grd.addColorStop(0, "#ffe9a8");
+  grd.addColorStop(0.5, "#e6b53e");
+  grd.addColorStop(1, "#9c6f1c");
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, r, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+function drawVaultRain() {
+  for (const c of rain) {
+    ctx.globalAlpha = c.alpha;
+    goldDisc(c.x, c.y, c.r, Math.cos(c.flip), c.rot);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawVault() {
+  // steel back wall
+  const wg = ctx.createLinearGradient(0, 0, 0, H);
+  wg.addColorStop(0, "#1a2030");
+  wg.addColorStop(1, "#090c14");
+  ctx.fillStyle = wg;
+  ctx.fillRect(0, 0, W, H);
+  // riveted panel seams
+  ctx.strokeStyle = "rgba(255,255,255,0.035)";
+  ctx.lineWidth = 1;
+  const grid = Math.max(110, Math.min(W, H) / 6);
+  for (let x = grid / 2; x < W; x += grid) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+  }
+  for (let y = grid / 2; y < H; y += grid) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  // the great round vault door, framed behind the register
+  drawVaultDoor(W / 2, H * 0.43, Math.min(W, H) * 0.46);
+  // stacks of gold bars in the lower corners
+  const by = H * 0.92;
+  drawGoldBarStack(W * 0.12, by);
+  drawGoldBarStack(W * 0.88, by);
+}
+
+function drawVaultDoor(cx, cy, R) {
+  // warm glow leaking from a vault full of gold
+  const gl = ctx.createRadialGradient(cx, cy, R * 0.12, cx, cy, R * 1.15);
+  gl.addColorStop(0, "rgba(255,200,90,0.20)");
+  gl.addColorStop(1, "rgba(255,200,90,0)");
+  ctx.fillStyle = gl;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 1.15, 0, Math.PI * 2);
+  ctx.fill();
+
+  const ring = (rad, light, dark) => {
+    const g = ctx.createRadialGradient(cx - rad * 0.35, cy - rad * 0.35, rad * 0.1, cx, cy, rad);
+    g.addColorStop(0, light);
+    g.addColorStop(1, dark);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  ring(R, "#586781", "#1f2734"); // outer steel
+  ring(R * 0.9, "#f3d178", "#8a6418"); // brass band
+  ring(R * 0.82, "#4e576c", "#1b2230"); // inner steel face
+
+  // perimeter bolts
+  ctx.fillStyle = "#cdd6e6";
+  const bolts = 24;
+  for (let i = 0; i < bolts; i++) {
+    const a = (i / bolts) * Math.PI * 2;
+    const bx = cx + Math.cos(a) * R * 0.95;
+    const byy = cy + Math.sin(a) * R * 0.95;
+    ctx.beginPath();
+    ctx.arc(bx, byy, R * 0.012, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // central handwheel: brass rim, spokes, hub
+  const wr = R * 0.34;
+  ctx.strokeStyle = "#e6b53e";
+  ctx.lineWidth = R * 0.05;
+  ctx.beginPath();
+  ctx.arc(cx, cy, wr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = R * 0.03;
+  ctx.strokeStyle = "#c79a32";
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * wr, cy + Math.sin(a) * wr);
+    ctx.stroke();
+  }
+  const hub = ctx.createRadialGradient(cx - wr * 0.2, cy - wr * 0.2, wr * 0.05, cx, cy, wr * 0.42);
+  hub.addColorStop(0, "#f3d178");
+  hub.addColorStop(1, "#7a5818");
+  ctx.fillStyle = hub;
+  ctx.beginPath();
+  ctx.arc(cx, cy, wr * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawGoldBarStack(cx, baseY) {
+  // a little pyramid of gold bars
+  const bw = clamp(Math.min(W, H) * 0.07, 36, 90);
+  const bh = bw * 0.42;
+  const bar = (x, y) => {
+    const g = ctx.createLinearGradient(x, y, x, y + bh);
+    g.addColorStop(0, "#ffe9a8");
+    g.addColorStop(0.5, "#e6b53e");
+    g.addColorStop(1, "#a9801f");
+    ctx.fillStyle = g;
+    rr(x, y, bw, bh, bh * 0.18);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,84,14,0.6)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // top face sheen
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    rr(x + bw * 0.1, y + bh * 0.12, bw * 0.8, bh * 0.22, bh * 0.1);
+    ctx.fill();
+  };
+  const rows = [3, 2, 1];
+  rows.forEach((nbar, r) => {
+    const rowY = baseY - (r + 1) * (bh + 3);
+    const rowX = cx - (nbar * (bw + 6)) / 2;
+    for (let i = 0; i < nbar; i++) bar(rowX + i * (bw + 6) + (r * (bw + 6)) / 2, rowY);
+  });
 }
 
 // ── register geometry (recomputed each frame) ───────────────────────────────
@@ -341,6 +508,15 @@ function step(dt, now) {
     }
   }
 
+  // vault rain — coins pouring from the ceiling, recycled at the bottom
+  for (const c of rain) {
+    c.y += c.vy * dt;
+    c.x += c.vx * dt;
+    c.rot += c.vrot * dt;
+    c.flip += c.vflip * dt;
+    if (c.y - c.r > H) resetRainCoin(c, true);
+  }
+
   // ambient + burst dust
   for (let i = dust.length - 1; i >= 0; i--) {
     const m = dust[i];
@@ -385,6 +561,8 @@ function draw(now) {
   ctx.clearRect(0, 0, W, H);
   const g = geom();
 
+  drawVault(); // steel wall, great round door, gold-bar stacks
+  drawVaultRain(); // coins pouring from the ceiling (behind the register)
   drawVignette();
   drawDust();
 

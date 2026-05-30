@@ -34,6 +34,8 @@ No external dependencies — pure Node built-ins.
 - **Animated brass-and-green cash register** with spinning slot reels, a coin
   fountain, ambient gold dust, and a glowing "TOTAL" sign — all scaled
   logarithmically to the per-request token count.
+- **Bank-vault backdrop** — a giant round vault door (brass band, bolts, spoked
+  handwheel), gold-bar pyramids, and coins endlessly pouring from the ceiling.
 - **Dollar cost** per turn and cumulative, using approximate Anthropic per-model
   list prices (Opus / Sonnet / Haiku), shown on the register and in the HUD.
 - **Persistent totals** — session / today / all-time tokens + cost survive
