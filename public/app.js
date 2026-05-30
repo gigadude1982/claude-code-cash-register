@@ -64,6 +64,34 @@ const state = {
   popup: null, // { text, life, color }
 };
 
+// ── per-profile "voice" (colour + distinct sound) ────────────────────────────
+// Each Claude profile gets its own hue + sound so work vs personal are instantly
+// distinguishable by ear and eye. Known profiles are hand-tuned; unknown ones
+// derive a stable voice from a hash of the name.
+const PROFILE_VOICES = {
+  personal: { hue: 45, chMul: 0.84, buzz: 175, wave: "triangle" }, // warm gold, lower
+  work: { hue: 205, chMul: 1.22, buzz: 300, wave: "sawtooth" }, // cool blue, higher/harsher
+  default: { hue: 140, chMul: 1.0, buzz: 220, wave: "sawtooth" },
+};
+const _voiceCache = new Map();
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function voiceFor(profile) {
+  const key = profile || "default";
+  if (_voiceCache.has(key)) return _voiceCache.get(key);
+  let v = PROFILE_VOICES[key];
+  if (!v) {
+    const h = hashStr(key);
+    v = { hue: h % 360, chMul: 0.8 + (h % 9) * 0.06, buzz: 160 + (h % 6) * 35, wave: h & 1 ? "sawtooth" : "square" };
+  }
+  const out = { ...v, name: key, color: `hsl(${v.hue},85%,62%)` };
+  _voiceCache.set(key, out);
+  return out;
+}
+
 // ── scaling math (logarithmic) ──────────────────────────────────────────────
 // More gold: bumped multiplier + ceiling so big turns truly rain coins.
 function coinCount(tokens) {
@@ -130,6 +158,7 @@ function applyState(d) {
   if (d.account) {
     state.account = d.account;
     el.account.textContent = d.account;
+    if (d.profile) el.account.style.color = voiceFor(d.profile).color;
   }
   if (d.email !== undefined) el.user.textContent = d.email || "";
   if (d.org !== undefined) {
@@ -180,7 +209,9 @@ function renderBoard(flashTs) {
       const flash = flashTs && e.ts === flashTs ? " flash" : "";
       const primary = cost ? usd(e.cost) : fmt(e.tokens);
       const meta = cost ? `${fmt(e.tokens)} tok` : usd(e.cost);
-      const label = e.label ? `<span class="label">${esc(e.label)}</span>` : `<span class="label dimlabel">— no prompt captured —</span>`;
+      const v = voiceFor(e.profile);
+      const chip = e.profile && e.profile !== "default" ? `<span class="pchip" style="background:${v.color}">${esc(e.profile)}</span>` : "";
+      const label = e.label ? `<span class="label">${chip}${esc(e.label)}</span>` : `<span class="label dimlabel">${chip}— no prompt captured —</span>`;
       return `<li class="${flash.trim()}"><span class="toks">${primary}</span><span class="meta">${meta}</span>${label}</li>`;
     })
     .join("");
@@ -189,8 +220,9 @@ function renderBoard(flashTs) {
 function fireBurst(d) {
   const tokens = Math.max(0, Math.round(d.turnTokens || 0));
   if (tokens <= 0) return;
-  stopAlert(); // Claude is generating again → silence any "needs input" alarm
+  stopAlert(d.profile); // this profile resumed → silence its "needs input" alarm
   const turnCost = Number(d.cost) || 0;
+  const voice = voiceFor(d.profile);
 
   const n = coinCount(tokens);
   const inten = intensity(tokens);
@@ -258,15 +290,16 @@ function fireBurst(d) {
 
   // ticker
   const u = d.usage || {};
+  const profChip = d.profile && d.profile !== "default" ? `<span class="pchip" style="background:${voice.color}">${esc(d.profile)}</span> ` : "";
   const promptBit = d.promptLabel ? ` <span style="color:#cfe9da">“${esc(d.promptLabel)}”</span>` : "";
   el.lastEvent.innerHTML =
-    `<b>cha-ching!</b> +${fmt(tokens)} tokens · <b style="color:#ffe9a8">${usd(turnCost)}</b> on <b>${esc(d.model || state.model)}</b>` +
+    `${profChip}<b>cha-ching!</b> +${fmt(tokens)} tokens · <b style="color:#ffe9a8">${usd(turnCost)}</b> on <b>${esc(d.model || state.model)}</b>` +
     promptBit +
     ` <span style="color:#8a93ad">(out ${fmt(u.output)} · cache+ ${fmt(u.cacheCreate)} · in ${fmt(u.input)} · cache-read ${fmt(u.cacheRead)})</span>` +
     (rank ? ` <span style="color:#ffcf3f">— #${rank} jackpot!</span>` : "");
 
-  playChaChing(n, inten);
-  if (isTopRecord) playFanfare();
+  playChaChing(n, inten, d.profile);
+  if (isTopRecord) playFanfare(d.profile);
 }
 
 // ── render loop ──────────────────────────────────────────────────────────────
@@ -891,42 +924,45 @@ function tone(freq, t0, dur, type, gain) {
   o.start(t0);
   o.stop(t0 + dur + 0.02);
 }
-function playChaChing(n, inten) {
+function playChaChing(n, inten, profile) {
   if (!audio) return;
+  const m = voiceFor(profile).chMul; // per-profile pitch shift
   const t = audio.currentTime;
   // the "cha-ching" two-note bell
-  tone(1318.5, t, 0.18, "triangle", 0.25); // E6
-  tone(1760.0, t + 0.09, 0.32, "triangle", 0.28); // A6
-  tone(880.0, t + 0.09, 0.32, "sine", 0.12);
+  tone(1318.5 * m, t, 0.18, "triangle", 0.25); // E6
+  tone(1760.0 * m, t + 0.09, 0.32, "triangle", 0.28); // A6
+  tone(880.0 * m, t + 0.09, 0.32, "sine", 0.12);
   // coin clinks spread across the fountain
   const clinks = Math.min(n, 36);
   const span = 0.5 + inten * 0.8;
   for (let i = 0; i < clinks; i++) {
     const tt = t + 0.05 + Math.random() * span;
-    tone(rand(2200, 4200), tt, 0.06, "square", 0.05);
+    tone(rand(2200, 4200) * m, tt, 0.06, "square", 0.05);
   }
 }
-function playFanfare() {
+function playFanfare(profile) {
   if (!audio) return;
+  const m = voiceFor(profile).chMul;
   const t = audio.currentTime;
   // a rising major arpeggio for a brand-new record
   [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
-    tone(f, t + i * 0.1, 0.45, "triangle", 0.22);
+    tone(f * m, t + i * 0.1, 0.45, "triangle", 0.22);
   });
 }
-function playBuzzer(volScale = 1) {
+function playBuzzer(volScale = 1, profile) {
   if (!audio) return;
+  const v = voiceFor(profile);
   const peak = 0.45 * clamp(volScale, 0, 1); // escalating loudness
   const t = audio.currentTime;
-  // three harsh low buzzes — the "you're needed" klaxon
+  // three harsh buzzes — the "you're needed" klaxon, pitched per profile
   for (let k = 0; k < 3; k++) {
     const t0 = t + k * 0.32;
     const o = audio.createOscillator();
     const g = audio.createGain();
     const lfo = audio.createOscillator(); // amplitude wobble for a raspy buzz
     const lfoGain = audio.createGain();
-    o.type = "sawtooth";
-    o.frequency.value = 220;
+    o.type = v.wave;
+    o.frequency.value = v.buzz;
     lfo.frequency.value = 28;
     lfoGain.gain.value = 0.18;
     lfo.connect(lfoGain).connect(g.gain);
@@ -966,43 +1002,64 @@ function onNewDay(d) {
 }
 
 // ── siren (Claude needs your input) ──────────────────────────────────────────
-// Loops the buzzer every 5s with escalating volume until the prompt is answered.
-// Stop signals: you submit a prompt (UserPromptSubmit → alertstop), Claude
-// resumes (a token burst), any click/keypress, or a ~60s safety cap.
+// Each profile gets its OWN escalating alarm loop (distinct pitch), so work and
+// personal can be needing input at the same time and you can tell which by ear.
+// Each loops every 5s with rising volume until that profile's prompt is answered
+// (UserPromptSubmit → alertstop), Claude resumes (a burst), a click/key, or a
+// ~60s safety cap.
 const ALERT_PERIOD_MS = 5000;
 const ALERT_MAX_ITERS = 12; // ≈60s — never blare forever
-let alertActive = false;
-let alertInterval = null;
-let alertIteration = 0;
+const alarms = new Map(); // profile -> { interval, iteration, msg }
 
+function renderSirenBanner() {
+  const active = [...alarms.entries()];
+  if (!active.length) return;
+  el.sirenText.innerHTML = active
+    .map(([p, a]) => `<span style="color:${voiceFor(p).color}">[${p}]</span> ${esc(a.msg)}`)
+    .join("&nbsp;&nbsp;·&nbsp;&nbsp;");
+}
 function showSiren(d) {
-  el.sirenText.textContent = (d.message || "Claude needs your input").toUpperCase();
+  const profile = d.profile || "default";
+  const msg = (d.message || "Claude needs your input").toUpperCase();
   el.siren.classList.add("on");
-  if (alertActive) return; // already blaring — just refreshed the message
-  alertActive = true;
-  alertIteration = 0;
-  buzzStep();
-  alertInterval = setInterval(buzzStep, ALERT_PERIOD_MS);
+  let a = alarms.get(profile);
+  if (a) {
+    a.msg = msg;
+    renderSirenBanner();
+    return; // already looping for this profile
+  }
+  a = { iteration: 0, interval: null, msg };
+  alarms.set(profile, a);
+  const step = () => {
+    a.iteration++;
+    const vol = Math.min(1, 0.4 + 0.15 * (a.iteration - 1)); // ramp 0.4 → 1
+    playBuzzer(vol, profile);
+    el.siren.style.setProperty("--siren-intensity", vol.toFixed(2));
+    renderSirenBanner();
+    if (a.iteration >= ALERT_MAX_ITERS) stopAlert(profile);
+  };
+  a.interval = setInterval(step, ALERT_PERIOD_MS);
+  step();
 }
-function buzzStep() {
-  alertIteration++;
-  // ramp from a soft 0.4 up to full volume over the first ~5 cycles
-  const vol = Math.min(1, 0.4 + 0.15 * (alertIteration - 1));
-  playBuzzer(vol);
-  el.siren.style.setProperty("--siren-intensity", vol.toFixed(2));
-  if (alertIteration >= ALERT_MAX_ITERS) stopAlert();
+function stopAlert(profile) {
+  if (profile) {
+    const a = alarms.get(profile);
+    if (a) clearInterval(a.interval);
+    alarms.delete(profile);
+  } else {
+    for (const a of alarms.values()) clearInterval(a.interval);
+    alarms.clear();
+  }
+  if (alarms.size === 0) {
+    el.siren.classList.remove("on");
+    el.siren.style.setProperty("--siren-intensity", "0");
+  } else {
+    renderSirenBanner();
+  }
 }
-function stopAlert() {
-  if (!alertActive && !el.siren.classList.contains("on")) return;
-  alertActive = false;
-  if (alertInterval) clearInterval(alertInterval);
-  alertInterval = null;
-  el.siren.classList.remove("on");
-  el.siren.style.setProperty("--siren-intensity", "0");
-}
-// any click or key silences it (you've seen it)
-window.addEventListener("pointerdown", stopAlert);
-window.addEventListener("keydown", stopAlert);
+// any click or key silences every alarm (you've seen it)
+window.addEventListener("pointerdown", () => stopAlert());
+window.addEventListener("keydown", () => stopAlert());
 
 // ── SSE wiring ───────────────────────────────────────────────────────────────
 function connect() {
@@ -1035,7 +1092,13 @@ function connect() {
       onNewDay(JSON.parse(e.data));
     } catch {}
   });
-  es.addEventListener("alertstop", () => stopAlert()); // you answered the prompt
+  es.addEventListener("alertstop", (e) => {
+    let profile = "";
+    try {
+      profile = JSON.parse(e.data).profile || "";
+    } catch {}
+    stopAlert(profile || undefined); // answered → silence that profile (or all)
+  });
   es.onerror = () => {
     el.connDot.classList.remove("live");
   };

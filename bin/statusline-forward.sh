@@ -14,11 +14,20 @@ input=$(cat)
 PORT="${CASH_REGISTER_PORT:-4321}"
 REAL_STATUSLINE="${REAL_STATUSLINE:-$HOME/.claude/statusline.sh}"
 
+# Which Claude profile is this? Derived from the active config dir name
+# (.claude → "default", .claude-work → "work", .claude-personal → "personal").
+_cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+_base="$(basename "$_cfg")"
+case "$_base" in
+  .claude | claude) PROFILE="default" ;;
+  *) PROFILE="${_base#.claude-}"; PROFILE="${PROFILE#claude-}" ;;
+esac
+
 # 1) Forward a copy to the cash register (non-blocking, ignore all failures).
 if command -v curl >/dev/null 2>&1; then
   printf '%s' "$input" | curl -s -m 1 -X POST --data-binary @- \
     -H 'Content-Type: application/json' \
-    "http://127.0.0.1:${PORT}/usage" >/dev/null 2>&1 &
+    "http://127.0.0.1:${PORT}/usage?profile=${PROFILE}" >/dev/null 2>&1 &
 fi
 
 # 2) Render the real status line (fall back to a minimal line if missing).

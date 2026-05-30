@@ -112,7 +112,7 @@ function placeOn(board, entry, key) {
 
 // Record one turn into all the running totals + both leaderboards.
 // Returns { rankTokens, rankCost, ts }.
-function recordTurn(tokens, cost, model, label) {
+function recordTurn(tokens, cost, model, label, profile) {
   sessionTokens += tokens;
   sessionCost += cost;
   const d = stats.daily[today()] || (stats.daily[today()] = { tokens: 0, cost: 0 });
@@ -122,7 +122,7 @@ function recordTurn(tokens, cost, model, label) {
   stats.allTime.cost += cost;
 
   const ts = Date.now();
-  const entry = { tokens, cost, model, label: label || "", ts };
+  const entry = { tokens, cost, model, label: label || "", profile: profile || "default", ts };
   const rankTokens = placeOn(stats.leaderboard, { ...entry }, "tokens");
   const rankCost = placeOn(stats.leaderboardCost, { ...entry }, "cost");
   saveStats();
@@ -153,30 +153,37 @@ function promptFor(info) {
   return ""; // its session never submitted a prompt → leave unlabelled
 }
 
-// ── account info (profile label + logged-in user + organization) ───────────────
-function readAccount() {
-  const cfg = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+// ── account info, resolved per Claude profile ──────────────────────────────────
+// A profile maps to a config dir: "default" → ~/.claude, "work" → ~/.claude-work,
+// etc. We read each profile's own .claude.json so the header shows the right
+// user/org for whichever profile just spent tokens. Results are cached.
+const HOME = homedir();
+function configDirFor(profile) {
+  if (!profile || profile === "default") return join(HOME, ".claude");
+  return join(HOME, `.claude-${profile}`);
+}
+// The server's own profile, for events that aren't tagged with one (e.g. hello).
+function profileFromDir(cfg) {
+  const base = (cfg || "").split("/").pop() || "";
+  if (!base || base === ".claude" || base === "claude") return "default";
+  return base.replace(/^\.?claude-/, "");
+}
+const OWN_PROFILE = profileFromDir(process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude"));
 
-  // profile label from the config dir name (e.g. ".claude-personal" → "personal")
-  const base = cfg.split("/").pop() || "";
-  let label = "Claude Code";
-  if (base && base !== ".claude" && base !== "claude") label = base.replace(/^\.?claude-/, "");
-
-  // logged-in user + org from .claude.json's oauthAccount block
+const acctCache = new Map();
+function accountFor(profile) {
+  const key = profile || OWN_PROFILE;
+  if (acctCache.has(key)) return acctCache.get(key);
+  const cfg = configDirFor(key);
   let email = "";
   let org = "";
   let role = "";
   try {
-    const j = JSON.parse(readFileSync(join(cfg, ".claude.json"), "utf8"));
-    const o = j.oauthAccount || {};
+    const o = JSON.parse(readFileSync(join(cfg, ".claude.json"), "utf8")).oauthAccount || {};
     email = o.emailAddress || o.email || "";
     org = o.organizationName || "";
     role = o.organizationRole || o.workspaceRole || "";
   } catch {
-    /* not logged in / no config */
-  }
-  // fall back to other known auth files for the email
-  if (!email) {
     for (const name of ["auth.json", ".credentials.json", "credentials.json", "account.json"]) {
       try {
         const j = JSON.parse(readFileSync(join(cfg, name), "utf8"));
@@ -187,12 +194,13 @@ function readAccount() {
       }
     }
   }
-  return { label, email, org, role };
+  const out = { account: key === "default" ? "Claude Code" : key, profile: key, email, org, role };
+  acctCache.set(key, out);
+  return out;
 }
-const ACCT = readAccount();
-const ACCOUNT = ACCT.label; // back-compat: existing payloads use a string label
-function accountPayload() {
-  return { account: ACCT.label, email: ACCT.email, org: ACCT.org, role: ACCT.role };
+const ACCOUNT = accountFor(OWN_PROFILE).account; // back-compat string label
+function accountPayload(profile) {
+  return accountFor(profile);
 }
 
 // ── usage parsing ──────────────────────────────────────────────────────────────
@@ -201,7 +209,7 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function parseUsage(data) {
+function parseUsage(data, profile) {
   const ctx = data.context_window || {};
   const cu = ctx.current_usage || {};
   const usage = {
@@ -231,18 +239,18 @@ function parseUsage(data) {
     rate7d: data.rate_limits?.seven_day?.used_percentage ?? null,
     session: data.session_name || data.session_id || "default",
     sessionId: data.session_id || "",
-    ...accountPayload(),
+    ...accountPayload(profile),
   };
 }
 
-function handleUsage(raw) {
+function handleUsage(raw, profile) {
   let data;
   try {
     data = JSON.parse(raw);
   } catch {
     return;
   }
-  const info = parseUsage(data);
+  const info = parseUsage(data, profile);
   if (!data.context_window || !data.context_window.current_usage) {
     // Before the first API call there's nothing to celebrate.
     Object.assign(info, { totals: totalsSnapshot() }, boards());
@@ -258,7 +266,7 @@ function handleUsage(raw) {
   if (isNewTurn && info.turnTokens > 0) {
     sessions.set(info.session, { lastSig: sig, lastTotals: info });
     info.promptLabel = promptFor(info);
-    const r = recordTurn(info.turnTokens, info.cost, info.model, info.promptLabel);
+    const r = recordTurn(info.turnTokens, info.cost, info.model, info.promptLabel, info.profile);
     info.rank = r.rankTokens; // jackpot celebration is token-based
     info.rankCost = r.rankCost;
     info.entryTs = r.ts;
@@ -327,8 +335,9 @@ const server = http.createServer((req, res) => {
       body += c;
       if (body.length > 1_000_000) req.destroy(); // sanity cap
     });
+    const profile = url.searchParams.get("profile") || "";
     req.on("end", () => {
-      handleUsage(body);
+      handleUsage(body, profile);
       res.writeHead(204).end();
     });
     return;
@@ -341,13 +350,16 @@ const server = http.createServer((req, res) => {
       body += c;
       if (body.length > 200_000) req.destroy();
     });
+    const profile = url.searchParams.get("profile") || "";
     req.on("end", () => {
+      let prof = profile;
       try {
         const j = JSON.parse(body);
         setPrompt(j.session || j.session_id, j.text || j.prompt);
+        prof = prof || j.profile || "";
       } catch {}
       // You just answered → silence the escalating "needs input" alarm.
-      broadcast("alertstop", {});
+      broadcast("alertstop", { profile: prof });
       res.writeHead(204).end();
     });
     return;
@@ -365,11 +377,12 @@ const server = http.createServer((req, res) => {
     };
     const cost = costOf(usage, modelId);
     const label = url.searchParams.get("label") || "🎰 manual test spin";
-    const r = recordTurn(tokens, cost, "Test Reel", label);
+    const profile = url.searchParams.get("profile") || OWN_PROFILE;
+    const r = recordTurn(tokens, cost, "Test Reel", label, profile);
     const payload = {
       model: "Test Reel",
       modelId,
-      ...accountPayload(),
+      ...accountPayload(profile),
       turnTokens: tokens,
       cost,
       usage,
@@ -390,8 +403,9 @@ const server = http.createServer((req, res) => {
 
   // Notification hook → red siren + buzzer in the browser.
   if (url.pathname === "/alert") {
+    const profile = url.searchParams.get("profile") || OWN_PROFILE;
     const fire = (msg) => {
-      broadcast("alert", { message: (msg && msg.message) || "Claude Code needs your input", title: (msg && msg.title) || "" });
+      broadcast("alert", { message: (msg && msg.message) || "Claude Code needs your input", title: (msg && msg.title) || "", profile });
       res.writeHead(204).end();
     };
     if (req.method === "POST") {
@@ -413,9 +427,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Manually silence the alarm (same as answering a prompt).
+  // Manually silence the alarm (same as answering a prompt). ?profile= scopes it.
   if (url.pathname === "/alertstop") {
-    broadcast("alertstop", {});
+    broadcast("alertstop", { profile: url.searchParams.get("profile") || "" });
     res.writeHead(200, { "Content-Type": "text/plain" }).end("alarm silenced\n");
     return;
   }

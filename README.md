@@ -85,11 +85,33 @@ instead of failing on a port clash. (`npm unlink -g claude-code-cash-register`
 removes it. You can also just run `./claude-code-cash-register` from the repo
 without linking.)
 
+### Multiple Claude profiles (work / personal / …)
+
+Run **one** cash register — every profile reports into it. Each hook tags its
+events with the profile (derived from `CLAUDE_CONFIG_DIR`: `~/.claude-work` →
+`work`), and the browser gives each profile its **own colour and sound** (a
+distinct cha-ching pitch + buzzer tone) so you can tell work from personal by ear
+and eye. Bursts, the leaderboard, the header, and the "needs input" alarm are all
+profile-aware — two profiles can even be alarming at once with different pitches.
+
+Wire up each profile once with the installer:
+
+```bash
+node bin/install-hooks.mjs ~/.claude-work       # add hooks to the work profile
+node bin/install-hooks.mjs ~/.claude-personal   # (idempotent)
+```
+
+It's non-destructive (backs up `settings.json`, preserves any existing status
+line via `REAL_STATUSLINE`). Then just `claude-code-cash-register` once and use
+Claude under any profile as normal. Tune the per-profile colours/sounds in
+`PROFILE_VOICES` near the top of `public/app.js`.
+
 ### Test without spending tokens
 
 ```bash
 curl "http://127.0.0.1:4321/burst?tokens=42000"                 # small/medium/big/JACKPOT by amount
 curl "http://127.0.0.1:4321/burst?tokens=90000&model=opus&label=huge+refactor"  # labelled jackpot
+curl "http://127.0.0.1:4321/burst?tokens=12000&profile=work"    # test the work profile's sound/colour
 curl "http://127.0.0.1:4321/alert?message=Permission+needed"    # red siren + buzzer
 curl "http://127.0.0.1:4321/newday"                             # simulate midnight rollover (chime)
 curl "http://127.0.0.1:4321/stats"                              # JSON of totals + both leaderboards

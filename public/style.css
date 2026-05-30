@@ -209,6 +209,20 @@ main {
   color: var(--dim);
   font-style: italic;
 }
+
+/* per-profile colour chip (work / personal / …) */
+.pchip {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #14140a;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
 #board-list li:nth-child(1) {
   background: linear-gradient(90deg, #ffcf3f33, #ffcf3f08);
   border: 1px solid #ffcf3f66;
