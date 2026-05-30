@@ -1,0 +1,17 @@
+{
+  "name": "claude-code-cash-register",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An animated slot-machine cash register that cha-chings every time Claude Code spends tokens.",
+  "type": "module",
+  "bin": {
+    "cash-register": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test:burst": "node -e \"fetch('http://127.0.0.1:'+(process.env.CASH_REGISTER_PORT||4321)+'/burst?tokens='+(process.argv[1]||12345)).then(r=>r.text()).then(console.log)\""
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,337 @@
+:root {
+  --bg: #0b0f1a;
+  --bg2: #131a2e;
+  --gold: #ffcf3f;
+  --gold-deep: #d99a1c;
+  --ink: #e9edf7;
+  --dim: #8a93ad;
+  --good: #3ddc84;
+  --warn: #ffb454;
+  --bad: #ff5d6c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg) 70%);
+  color: var(--ink);
+  font: 14px/1.4 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  border-bottom: 1px solid #ffffff14;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+#account {
+  color: var(--gold);
+}
+.who {
+  font-weight: 500;
+  color: var(--dim);
+  padding-left: 8px;
+  border-left: 1px solid #ffffff1a;
+}
+.who:empty {
+  display: none;
+}
+#user::before {
+  content: "👤 ";
+}
+#org::before {
+  content: "🏢 ";
+}
+
+.hud-right {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  background: #ffffff10;
+  border: 1px solid #ffffff1a;
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+#model {
+  color: var(--gold);
+  border-color: #ffcf3f44;
+}
+
+.pill.gold {
+  color: #ffe9a8;
+  border-color: #ffcf3f55;
+  background: linear-gradient(180deg, #2a2410, #1a1606);
+  box-shadow: inset 0 0 8px #ffcf3f22;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 8px currentColor;
+  transition: background 0.3s;
+}
+.dot.live {
+  background: var(--good);
+}
+
+main {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#leaderboard {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 250px;
+  max-width: 40vw;
+  background: linear-gradient(180deg, #1c1708ee, #120e04ee);
+  border: 1px solid #ffcf3f55;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 40px #000a, inset 0 0 24px #ffcf3f14;
+  z-index: 2;
+  backdrop-filter: blur(3px);
+}
+#leaderboard h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 0 0 10px #ffcf3f55;
+}
+#board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: rank;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#board-list li {
+  counter-increment: rank;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: #ffffff08;
+}
+#board-list li::before {
+  content: counter(rank);
+  color: var(--dim);
+  font-weight: 700;
+  text-align: center;
+  align-self: start;
+}
+#board-list li .label {
+  grid-column: 2 / -1;
+  color: #cfe9da;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+#board-list li .label.dimlabel {
+  color: var(--dim);
+  font-style: italic;
+}
+#board-list li:nth-child(1) {
+  background: linear-gradient(90deg, #ffcf3f33, #ffcf3f08);
+  border: 1px solid #ffcf3f66;
+}
+#board-list li:nth-child(1)::before {
+  content: "🥇";
+}
+#board-list li:nth-child(2)::before {
+  content: "🥈";
+}
+#board-list li:nth-child(3)::before {
+  content: "🥉";
+}
+#board-list li .toks {
+  color: var(--gold);
+  font-weight: 700;
+}
+#board-list li .meta {
+  color: var(--dim);
+  font-size: 11px;
+}
+#board-list li.empty {
+  grid-template-columns: 1fr;
+  color: var(--dim);
+  background: transparent;
+}
+#board-list li.empty::before {
+  content: "";
+}
+#board-list li.flash {
+  animation: recordflash 1.4s ease-out;
+}
+@keyframes recordflash {
+  0% {
+    transform: scale(1.18);
+    box-shadow: 0 0 30px #ffe25a;
+    background: #ffe25a;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+#ticker {
+  padding: 8px 16px;
+  border-top: 1px solid #ffffff14;
+  color: var(--dim);
+  font-size: 13px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+#last-event b {
+  color: var(--gold);
+}
+
+/* ── red cop-light siren (shown when Claude needs input) ───────────────────── */
+#siren {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  overflow: hidden;
+}
+#siren.on {
+  opacity: 1;
+}
+.siren-wash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(80% 70% at 50% 50%, #ff1a2e55, #ff000010 60%, transparent 75%);
+  animation: sirenpulse 0.7s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+.siren-beam {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220vmax;
+  height: 64vmax;
+  margin: -32vmax 0 0 -110vmax;
+  background: conic-gradient(from 0deg at 0% 50%, transparent 0deg, #ff2233cc 8deg, transparent 22deg);
+  transform-origin: 0% 50%;
+  animation: sirensweep 1.6s linear infinite;
+  mix-blend-mode: screen;
+}
+.siren-beam.two {
+  animation-delay: -0.8s;
+  filter: hue-rotate(-10deg);
+}
+.siren-banner {
+  position: absolute;
+  top: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(20px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow: 0 0 18px #ff2233, 0 0 40px #ff0010;
+  background: #c40016cc;
+  border: 2px solid #ff5566;
+  border-radius: 12px;
+  padding: 10px 22px;
+  animation: sirenpulse 0.7s ease-in-out infinite;
+  white-space: nowrap;
+}
+@keyframes sirensweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sirenpulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+#sound-gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0b0f1ab0;
+  backdrop-filter: blur(3px);
+  z-index: 10;
+}
+#sound-gate.hidden {
+  display: none;
+}
+#enable-sound {
+  font: inherit;
+  font-size: 16px;
+  padding: 14px 22px;
+  border-radius: 12px;
+  border: 1px solid var(--gold);
+  background: linear-gradient(180deg, #1d2640, #121a30);
+  color: var(--gold);
+  cursor: pointer;
+  box-shadow: 0 8px 30px #0008;
+}
+#enable-sound:hover {
+  background: #243057;
+}

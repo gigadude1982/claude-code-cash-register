@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude Code Cash Register 💰</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>"
+    />
+  </head>
+  <body>
+    <header id="hud">
+      <div class="hud-left">
+        <span class="dot" id="conn-dot"></span>
+        <span id="account">connecting…</span>
+        <span id="user" class="who"></span>
+        <span id="org" class="who"></span>
+      </div>
+      <div class="hud-right">
+        <span id="model" class="pill">—</span>
+        <span id="ctx" class="pill">ctx —</span>
+        <span id="today" class="pill gold">today: 0 tok · $0.00</span>
+        <span id="alltime" class="pill gold">all-time: 0 tok · $0.00</span>
+      </div>
+    </header>
+
+    <main>
+      <canvas id="stage"></canvas>
+
+      <aside id="leaderboard">
+        <h2>🏆 Biggest Jackpots</h2>
+        <ol id="board-list">
+          <li class="empty">No jackpots yet — go spend some tokens.</li>
+        </ol>
+      </aside>
+    </main>
+
+    <footer id="ticker">
+      <span id="last-event">Waiting for Claude Code to spend a token…</span>
+    </footer>
+
+    <div id="siren" aria-hidden="true">
+      <div class="siren-beam"></div>
+      <div class="siren-beam two"></div>
+      <div class="siren-wash"></div>
+      <div class="siren-banner">🚨 <span id="siren-text">CLAUDE NEEDS YOUR INPUT</span> 🚨</div>
+    </div>
+
+    <div id="sound-gate">
+      <button id="enable-sound">🔊 Click to enable cha-ching & siren</button>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

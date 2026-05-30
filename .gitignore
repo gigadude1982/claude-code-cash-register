@@ -1,0 +1,12 @@
+# runtime stats (per-machine usage data, not source)
+/data/
+
+# dependencies (this project has none, but just in case)
+/node_modules/
+
+# local Claude Code settings
+/.claude/settings.local.json
+
+# os cruft
+.DS_Store
+*.log
