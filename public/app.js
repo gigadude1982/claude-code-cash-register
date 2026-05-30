@@ -14,6 +14,8 @@ const el = {
   today: document.getElementById("today"),
   alltime: document.getElementById("alltime"),
   board: document.getElementById("board-list"),
+  tabTokens: document.getElementById("tab-tokens"),
+  tabCost: document.getElementById("tab-cost"),
   lastEvent: document.getElementById("last-event"),
   connDot: document.getElementById("conn-dot"),
   soundGate: document.getElementById("sound-gate"),
@@ -49,6 +51,9 @@ const state = {
   sessionTotal: 0,
   sessionCost: 0,
   ctxPct: null,
+  boards: { tokens: [], cost: [] }, // leaderboards by view
+  boardView: "tokens",
+  day: null,
   // animation
   shake: 0,
   glow: 0, // 0..1 register glow
@@ -150,22 +155,33 @@ function applyState(d) {
     if (t.today) el.today.textContent = `today: ${fmt(t.today.tokens)} tok · ${usd(t.today.cost)}`;
     if (t.allTime) el.alltime.textContent = `all-time: ${fmt(t.allTime.tokens)} tok · ${usd(t.allTime.cost)}`;
   }
-  if (d.leaderboard) renderBoard(d.leaderboard);
+  if (d.day) state.day = d.day;
+  if (d.leaderboard) state.boards.tokens = d.leaderboard;
+  if (d.leaderboardCost) state.boards.cost = d.leaderboardCost;
+  if (d.leaderboard || d.leaderboardCost) renderBoard();
 }
 
-function renderBoard(list, flashRank) {
-  if (!list || !list.length) {
+function setBoardView(view) {
+  state.boardView = view;
+  el.tabTokens.classList.toggle("active", view === "tokens");
+  el.tabCost.classList.toggle("active", view === "cost");
+  renderBoard();
+}
+
+function renderBoard(flashTs) {
+  const cost = state.boardView === "cost";
+  const list = state.boards[state.boardView] || [];
+  if (!list.length) {
     el.board.innerHTML = `<li class="empty">No jackpots yet — go spend some tokens.</li>`;
     return;
   }
   el.board.innerHTML = list
-    .map((e, i) => {
-      const flash = flashRank && i + 1 === flashRank ? " flash" : "";
+    .map((e) => {
+      const flash = flashTs && e.ts === flashTs ? " flash" : "";
+      const primary = cost ? usd(e.cost) : fmt(e.tokens);
+      const meta = cost ? `${fmt(e.tokens)} tok` : usd(e.cost);
       const label = e.label ? `<span class="label">${esc(e.label)}</span>` : `<span class="label dimlabel">— no prompt captured —</span>`;
-      return (
-        `<li class="${flash.trim()}"><span class="toks">${fmt(e.tokens)}</span>` +
-        `<span class="meta">${usd(e.cost)}</span>${label}</li>`
-      );
+      return `<li class="${flash.trim()}"><span class="toks">${primary}</span><span class="meta">${meta}</span>${label}</li>`;
     })
     .join("");
 }
@@ -183,9 +199,9 @@ function fireBurst(d) {
   if (isTopRecord) tier = 4; // a brand-new #1 always reads as JACKPOT
   state.lastTier = tier;
 
-  // refresh totals / leaderboard pills, flashing the new entry
+  // refresh totals / leaderboard pills, flashing this turn's new entry
   applyState(d);
-  if (rank) renderBoard(d.leaderboard, rank);
+  renderBoard(d.entryTs);
 
   // shake / glow / drawer / bell — records crank everything up
   const recordBoost = isTopRecord ? 1.5 : 1;
@@ -924,6 +940,29 @@ function playBuzzer() {
   }
 }
 
+function playDayChime() {
+  if (!audio) return;
+  const t = audio.currentTime;
+  // gentle bright triad sweep — "a fresh day, the register resets"
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+    tone(f, t + i * 0.16, 1.1, "sine", 0.16);
+    tone(f * 2, t + i * 0.16, 0.7, "triangle", 0.05); // soft shimmer
+  });
+}
+function onNewDay(d) {
+  state.day = d.date;
+  // today's running total resets to zero at the rollover
+  el.today.textContent = `today: 0 tok · $0.00`;
+  const prev = d.previous || { tokens: 0, cost: 0 };
+  state.popup = {
+    text: `🌅 NEW DAY — yesterday: ${fmt(prev.tokens)} tok · ${usd(prev.cost)}`,
+    life: 1.6,
+    color: "#bfe9ff",
+  };
+  el.lastEvent.innerHTML = `<b>🌅 New day.</b> Today's total reset. Yesterday: <b style="color:#ffe9a8">${fmt(prev.tokens)} tokens · ${usd(prev.cost)}</b>.`;
+  playDayChime();
+}
+
 // ── siren (Claude needs your input) ──────────────────────────────────────────
 let sirenTimer = null;
 function showSiren(d) {
@@ -967,6 +1006,11 @@ function connect() {
       showSiren({});
     }
   });
+  es.addEventListener("newday", (e) => {
+    try {
+      onNewDay(JSON.parse(e.data));
+    } catch {}
+  });
   es.onerror = () => {
     el.connDot.classList.remove("live");
   };
@@ -997,10 +1041,18 @@ el.enableSound.addEventListener("click", () => {
   initAudio();
   el.soundGate.classList.add("hidden");
 });
+el.tabTokens.addEventListener("click", () => setBoardView("tokens"));
+el.tabCost.addEventListener("click", () => setBoardView("cost"));
 // allow muted viewing too: dismiss on any key
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") el.soundGate.classList.add("hidden");
 });
+
+// URL conveniences: ?board=cost picks the cost leaderboard; ?nogate skips the
+// click-to-enable-sound overlay (handy for an always-on dashboard, muted).
+const params = new URLSearchParams(location.search);
+if (params.get("board") === "cost") setBoardView("cost");
+if (params.has("nogate")) el.soundGate.classList.add("hidden");
 
 resize();
 requestAnimationFrame(frame);

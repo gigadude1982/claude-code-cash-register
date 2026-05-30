@@ -53,7 +53,8 @@ function costOf(u, modelId) {
 
 // ── persistent stats (survive restarts) ─────────────────────────────────────────
 const LEADERBOARD_MAX = 10;
-let stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [] };
+// leaderboard = biggest by tokens; leaderboardCost = most expensive by $.
+let stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [], leaderboardCost: [] };
 let sessionTokens = 0; // this server run only
 let sessionCost = 0;
 
@@ -63,6 +64,7 @@ function loadStats() {
     stats.allTime = j.allTime || stats.allTime;
     stats.daily = j.daily || {};
     stats.leaderboard = Array.isArray(j.leaderboard) ? j.leaderboard : [];
+    stats.leaderboardCost = Array.isArray(j.leaderboardCost) ? j.leaderboardCost : [];
   } catch {
     /* first run */
   }
@@ -83,6 +85,10 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+const boards = () => ({
+  leaderboard: stats.leaderboard.slice(0, 5),
+  leaderboardCost: stats.leaderboardCost.slice(0, 5),
+});
 function totalsSnapshot() {
   const d = stats.daily[today()] || { tokens: 0, cost: 0 };
   return {
@@ -92,8 +98,20 @@ function totalsSnapshot() {
   };
 }
 
-// Record one turn into all the running totals + leaderboard.
-// Returns the leaderboard rank (1-based) if it cracked the top, else 0.
+// Insert into a capped leaderboard sorted by `key`. Returns 1-based rank, or 0.
+function placeOn(board, entry, key) {
+  const lowest = board.length < LEADERBOARD_MAX ? -1 : board[board.length - 1][key];
+  if (board.length < LEADERBOARD_MAX || entry[key] > lowest) {
+    board.push(entry);
+    board.sort((a, b) => b[key] - a[key]);
+    board.length = Math.min(LEADERBOARD_MAX, board.length);
+    return board.indexOf(entry) + 1; // 0 if it fell off after the sort
+  }
+  return 0;
+}
+
+// Record one turn into all the running totals + both leaderboards.
+// Returns { rankTokens, rankCost, ts }.
 function recordTurn(tokens, cost, model, label) {
   sessionTokens += tokens;
   sessionCost += cost;
@@ -103,23 +121,19 @@ function recordTurn(tokens, cost, model, label) {
   stats.allTime.tokens += tokens;
   stats.allTime.cost += cost;
 
-  let rank = 0;
-  const board = stats.leaderboard;
-  const lowest = board.length < LEADERBOARD_MAX ? -1 : board[board.length - 1].tokens;
-  if (board.length < LEADERBOARD_MAX || tokens > lowest) {
-    const entry = { tokens, cost, model, label: label || "", ts: Date.now() };
-    board.push(entry);
-    board.sort((a, b) => b.tokens - a.tokens);
-    board.length = Math.min(LEADERBOARD_MAX, board.length);
-    rank = board.indexOf(entry) + 1; // 0 if it fell off after the sort
-  }
+  const ts = Date.now();
+  const entry = { tokens, cost, model, label: label || "", ts };
+  const rankTokens = placeOn(stats.leaderboard, { ...entry }, "tokens");
+  const rankCost = placeOn(stats.leaderboardCost, { ...entry }, "cost");
   saveStats();
-  return rank;
+  return { rankTokens, rankCost, ts };
 }
 
 // ── recent prompt synopsis per session (labels the jackpot leaderboard) ────────
+// Keyed strictly by session so a turn only ever borrows its OWN session's prompt
+// — no cross-session guessing. The statusLine JSON and the UserPromptSubmit hook
+// both carry session_id, which is the reliable join key.
 const sessionPrompts = new Map(); // session key -> { text, ts }
-let lastPromptAny = null;
 function synopsis(text) {
   return String(text || "")
     .replace(/\s+/g, " ")
@@ -128,19 +142,15 @@ function synopsis(text) {
 }
 function setPrompt(session, text) {
   const s = synopsis(text);
-  if (!s) return;
-  const entry = { text: s, ts: Date.now() };
-  if (session) sessionPrompts.set(String(session), entry);
-  lastPromptAny = entry;
+  if (!s || !session) return;
+  sessionPrompts.set(String(session), { text: s, ts: Date.now() });
 }
 function promptFor(info) {
   for (const k of [info.sessionId, info.session].filter(Boolean)) {
     const e = sessionPrompts.get(String(k));
     if (e) return e.text;
   }
-  // fall back to the most recent prompt if it's fresh (within 10 min)
-  if (lastPromptAny && Date.now() - lastPromptAny.ts < 600000) return lastPromptAny.text;
-  return "";
+  return ""; // its session never submitted a prompt → leave unlabelled
 }
 
 // ── account info (profile label + logged-in user + organization) ───────────────
@@ -235,8 +245,7 @@ function handleUsage(raw) {
   const info = parseUsage(data);
   if (!data.context_window || !data.context_window.current_usage) {
     // Before the first API call there's nothing to celebrate.
-    info.totals = totalsSnapshot();
-    info.leaderboard = stats.leaderboard.slice(0, 5);
+    Object.assign(info, { totals: totalsSnapshot() }, boards());
     broadcast("state", info);
     return;
   }
@@ -249,15 +258,16 @@ function handleUsage(raw) {
   if (isNewTurn && info.turnTokens > 0) {
     sessions.set(info.session, { lastSig: sig, lastTotals: info });
     info.promptLabel = promptFor(info);
-    info.rank = recordTurn(info.turnTokens, info.cost, info.model, info.promptLabel);
-    info.totals = totalsSnapshot();
-    info.leaderboard = stats.leaderboard.slice(0, 5);
+    const r = recordTurn(info.turnTokens, info.cost, info.model, info.promptLabel);
+    info.rank = r.rankTokens; // jackpot celebration is token-based
+    info.rankCost = r.rankCost;
+    info.entryTs = r.ts;
+    Object.assign(info, { totals: totalsSnapshot() }, boards());
     broadcast("state", info); // refresh header first
     broadcast("burst", info);
   } else {
     if (!prev) sessions.set(info.session, { lastSig: sig, lastTotals: info });
-    info.totals = totalsSnapshot();
-    info.leaderboard = stats.leaderboard.slice(0, 5);
+    Object.assign(info, { totals: totalsSnapshot() }, boards());
     broadcast("state", info);
   }
 }
@@ -299,7 +309,7 @@ const server = http.createServer((req, res) => {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
-    const hello = { ...accountPayload(), totals: totalsSnapshot(), leaderboard: stats.leaderboard.slice(0, 5) };
+    const hello = { ...accountPayload(), totals: totalsSnapshot(), ...boards(), day: today() };
     res.write(`event: hello\ndata: ${JSON.stringify(hello)}\n\n`);
     clients.add(res);
     const keepAlive = setInterval(() => res.write(": ping\n\n"), 25000);
@@ -353,7 +363,7 @@ const server = http.createServer((req, res) => {
     };
     const cost = costOf(usage, modelId);
     const label = url.searchParams.get("label") || "🎰 manual test spin";
-    const rank = recordTurn(tokens, cost, "Test Reel", label);
+    const r = recordTurn(tokens, cost, "Test Reel", label);
     const payload = {
       model: "Test Reel",
       modelId,
@@ -363,14 +373,16 @@ const server = http.createServer((req, res) => {
       usage,
       usedPct: null,
       session: "test",
-      rank,
+      rank: r.rankTokens,
+      rankCost: r.rankCost,
+      entryTs: r.ts,
       promptLabel: label,
       totals: totalsSnapshot(),
-      leaderboard: stats.leaderboard.slice(0, 5),
+      ...boards(),
     };
     broadcast("state", payload);
     broadcast("burst", payload);
-    res.writeHead(200, { "Content-Type": "text/plain" }).end(`cha-ching: ${tokens} tokens · $${cost.toFixed(4)}${rank ? ` · #${rank}!` : ""}\n`);
+    res.writeHead(200, { "Content-Type": "text/plain" }).end(`cha-ching: ${tokens} tokens · $${cost.toFixed(4)}${r.rankTokens ? ` · #${r.rankTokens} tokens` : ""}${r.rankCost ? ` · #${r.rankCost} cost` : ""}\n`);
     return;
   }
 
@@ -401,17 +413,25 @@ const server = http.createServer((req, res) => {
 
   // Stats JSON + reset.
   if (url.pathname === "/stats") {
-    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ totals: totalsSnapshot(), leaderboard: stats.leaderboard }, null, 2));
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ totals: totalsSnapshot(), leaderboard: stats.leaderboard, leaderboardCost: stats.leaderboardCost }, null, 2));
     return;
   }
   if (url.pathname === "/reset") {
-    stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [] };
+    stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [], leaderboardCost: [] };
     sessionTokens = 0;
     sessionCost = 0;
     saveStats();
-    const snap = { ...accountPayload(), totals: totalsSnapshot(), leaderboard: [] };
+    const snap = { ...accountPayload(), totals: totalsSnapshot(), ...boards(), day: today() };
     broadcast("hello", snap);
     res.writeHead(200, { "Content-Type": "text/plain" }).end("stats reset\n");
+    return;
+  }
+  // Manual test: GET /newday  (simulate a midnight rollover)
+  if (url.pathname === "/newday") {
+    const prev = stats.daily[currentDay] || { tokens: 0, cost: 0 };
+    currentDay = today();
+    broadcast("newday", { date: currentDay, previous: { tokens: prev.tokens, cost: prev.cost } });
+    res.writeHead(200, { "Content-Type": "text/plain" }).end("new day broadcast\n");
     return;
   }
 
@@ -419,6 +439,17 @@ const server = http.createServer((req, res) => {
 });
 
 loadStats();
+
+// ── daily rollover watcher (fires the new-day chime at local midnight) ──────────
+let currentDay = today();
+setInterval(() => {
+  const d = today();
+  if (d !== currentDay) {
+    const prev = stats.daily[currentDay] || { tokens: 0, cost: 0 };
+    currentDay = d;
+    broadcast("newday", { date: d, previous: { tokens: prev.tokens, cost: prev.cost } });
+  }
+}, 30_000).unref();
 
 server.listen(PORT, () => {
   const url = `http://127.0.0.1:${PORT}`;

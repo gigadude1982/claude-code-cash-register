@@ -30,7 +30,13 @@
       <canvas id="stage"></canvas>
 
       <aside id="leaderboard">
-        <h2>🏆 Biggest Jackpots</h2>
+        <div class="board-head">
+          <h2>🏆 Biggest Jackpots</h2>
+          <div class="board-toggle" role="tablist">
+            <button id="tab-tokens" class="active" data-view="tokens">Tokens</button>
+            <button id="tab-cost" data-view="cost">Cost</button>
+          </div>
+        </div>
         <ol id="board-list">
           <li class="empty">No jackpots yet — go spend some tokens.</li>
         </ol>

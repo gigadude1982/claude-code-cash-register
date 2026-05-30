@@ -132,13 +132,40 @@ main {
   z-index: 2;
   backdrop-filter: blur(3px);
 }
+.board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
 #leaderboard h2 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gold);
   text-shadow: 0 0 10px #ffcf3f55;
+}
+.board-toggle {
+  display: flex;
+  border: 1px solid #ffcf3f44;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.board-toggle button {
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.board-toggle button.active {
+  background: linear-gradient(180deg, #ffcf3f, #d99a1c);
+  color: #1a1404;
+  font-weight: 700;
 }
 #board-list {
   list-style: none;
