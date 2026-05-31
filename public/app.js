@@ -192,7 +192,7 @@ function drawVaultRain() {
 }
 
 // A golden brick road receding to a glowing horizon, the register sitting on it.
-function drawVault() {
+function drawVault(g) {
   const horizonY = H * 0.4;
   const cx = W / 2;
   const roadHalfBottom = Math.min(W * 0.62, W / 2 - 10);
@@ -201,19 +201,20 @@ function drawVault() {
   // sky → warm horizon
   const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
   sky.addColorStop(0, "#0c0f1a");
-  sky.addColorStop(1, "#6b4a16");
+  sky.addColorStop(0.6, "#3a2a10");
+  sky.addColorStop(1, "#8a5e1c");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, horizonY);
   // dark ground either side of the road
   const gnd = ctx.createLinearGradient(0, horizonY, 0, H);
-  gnd.addColorStop(0, "#2b2009");
+  gnd.addColorStop(0, "#33260b");
   gnd.addColorStop(1, "#0d0a04");
   ctx.fillStyle = gnd;
   ctx.fillRect(0, horizonY, W, H - horizonY);
-  // sun glow at the vanishing point
-  const glow = ctx.createRadialGradient(cx, horizonY, 0, cx, horizonY, Math.min(W, H) * 0.55);
-  glow.addColorStop(0, "rgba(255,214,110,0.55)");
-  glow.addColorStop(0.5, "rgba(255,196,86,0.12)");
+  // sun glow at the vanishing point (warmer + a little brighter)
+  const glow = ctx.createRadialGradient(cx, horizonY, 0, cx, horizonY, Math.min(W, H) * 0.6);
+  glow.addColorStop(0, "rgba(255,224,140,0.7)");
+  glow.addColorStop(0.45, "rgba(255,200,90,0.18)");
   glow.addColorStop(1, "rgba(255,196,86,0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
@@ -234,23 +235,32 @@ function drawVault() {
   // brick courses in perspective (clipped to the road)
   ctx.save();
   ctx.clip();
-  ctx.strokeStyle = "rgba(120,84,14,0.55)";
-  ctx.lineWidth = 1;
   let y = H;
-  let gap = (H - horizonY) * 0.15;
+  let gap = (H - horizonY) * 0.12; // denser courses
   let row = 0;
+  const nb = 9;
   while (y > horizonY + 2) {
     const half = halfAt(y) || 0.0001;
+    const ny = Math.max(horizonY, y - gap);
+    const nhalf = halfAt(ny) || 0.0001;
+    // alternate-course shading band for a bricky feel
+    ctx.fillStyle = row % 2 ? "rgba(255,240,190,0.06)" : "rgba(120,84,14,0.07)";
+    ctx.beginPath();
+    ctx.moveTo(cx - half, y);
+    ctx.lineTo(cx + half, y);
+    ctx.lineTo(cx + nhalf, ny);
+    ctx.lineTo(cx - nhalf, ny);
+    ctx.closePath();
+    ctx.fill();
     // horizontal mortar line
+    ctx.strokeStyle = "rgba(110,76,12,0.6)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx - half, y);
     ctx.lineTo(cx + half, y);
     ctx.stroke();
     // vertical seams, offset every other course, converging toward the horizon
-    const nb = 10;
     const bw = (2 * half) / nb;
-    const ny = Math.max(horizonY, y - gap);
-    const nhalf = halfAt(ny) || 0.0001;
     const off = row % 2 ? bw / 2 : 0;
     for (let b = 0; b <= nb; b++) {
       const x = cx - half + off + b * bw;
@@ -262,13 +272,13 @@ function drawVault() {
       ctx.stroke();
     }
     y -= gap;
-    gap *= 0.82;
+    gap *= 0.84;
     row++;
   }
   ctx.restore();
 
   // glowing road edges
-  ctx.strokeStyle = "rgba(255,247,205,0.55)";
+  ctx.strokeStyle = "rgba(255,247,205,0.6)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(cx - halfAt(H), H);
@@ -276,6 +286,23 @@ function drawVault() {
   ctx.moveTo(cx + halfAt(H), H);
   ctx.lineTo(cx, horizonY);
   ctx.stroke();
+
+  // the register casts a warm pool of light onto the bricks beneath it
+  if (g) {
+    const lx = g.cx;
+    const ly = g.by + g.bh * 0.98;
+    const lr = g.bw * 0.95;
+    const rgl = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+    const warm = 0.28 + state.glow * 0.4; // brightens on a win
+    rgl.addColorStop(0, `rgba(255,221,130,${warm})`);
+    rgl.addColorStop(1, "rgba(255,221,130,0)");
+    ctx.fillStyle = rgl;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(lx, ly, lr, lr * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // gold bar stacks resting on the verge
   const by = H * 0.95;
@@ -583,7 +610,7 @@ function draw(now) {
   ctx.clearRect(0, 0, W, H);
   const g = geom();
 
-  drawVault(); // golden brick road to a glowing horizon + gold-bar stacks
+  drawVault(g); // golden brick road to a glowing horizon + gold-bar stacks
   drawVaultRain(); // coins raining from the sky (behind the register)
   drawVignette();
   drawDust();
