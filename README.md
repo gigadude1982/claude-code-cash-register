@@ -34,12 +34,13 @@ No external dependencies — pure Node built-ins.
 - **Animated brass-and-green cash register** with spinning slot reels, a coin
   fountain, ambient gold dust, and a glowing "TOTAL" sign — all scaled
   logarithmically to the per-request token count.
-- **Bank-vault backdrop** — a giant round vault door (brass band, bolts, spoked
-  handwheel), gold-bar pyramids, and coins endlessly pouring from the ceiling.
+- **Golden-brick-road backdrop** — a gold brick road receding to a glowing
+  horizon, gold-bar stacks on the verge, and coins endlessly raining from the sky.
 - **Dollar cost** per turn and cumulative, using approximate Anthropic per-model
   list prices (Opus / Sonnet / Haiku), shown on the register and in the HUD.
 - **Persistent totals** — session / today / all-time tokens + cost survive
-  restarts (`data/stats.json`).
+  restarts (`data/stats.json`), tracked **combined and per-profile** (a left-hand
+  scoreboard breaks down each profile's session/today/all-time).
 - **Jackpot leaderboard** with a **Tokens / Cost toggle** — two boards, the
   biggest single-turn token burns and the most expensive turns by `$` (they can
   rank differently). Each entry is labelled with a **synopsis of the prompt**

@@ -118,6 +118,60 @@ main {
   display: block;
 }
 
+#profiles {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 240px;
+  max-width: 40vw;
+  background: linear-gradient(180deg, #11161fee, #0a0d13ee);
+  border: 1px solid #ffffff1f;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 40px #000a;
+  z-index: 2;
+  backdrop-filter: blur(3px);
+}
+#profiles h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+#profiles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#profiles-list .prow {
+  border-left: 3px solid var(--pc, #888);
+  padding: 3px 0 3px 9px;
+}
+#profiles-list .pname {
+  font-weight: 700;
+  color: var(--pc, #ddd);
+  display: flex;
+  justify-content: space-between;
+}
+#profiles-list .pname .psub {
+  color: var(--dim);
+  font-weight: 500;
+  font-size: 11px;
+}
+#profiles-list .pstat {
+  font-size: 11px;
+  color: var(--dim);
+}
+#profiles-list .pstat b {
+  color: #ffe9a8;
+  font-weight: 600;
+}
+#profiles-list .empty {
+  color: var(--dim);
+  font-size: 12px;
+}
+
 #leaderboard {
   position: absolute;
   top: 16px;

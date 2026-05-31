@@ -14,6 +14,7 @@ const el = {
   today: document.getElementById("today"),
   alltime: document.getElementById("alltime"),
   board: document.getElementById("board-list"),
+  profilesList: document.getElementById("profiles-list"),
   tabTokens: document.getElementById("tab-tokens"),
   tabCost: document.getElementById("tab-cost"),
   lastEvent: document.getElementById("last-event"),
@@ -190,95 +191,96 @@ function drawVaultRain() {
   ctx.globalAlpha = 1;
 }
 
+// A golden brick road receding to a glowing horizon, the register sitting on it.
 function drawVault() {
-  // steel back wall
-  const wg = ctx.createLinearGradient(0, 0, 0, H);
-  wg.addColorStop(0, "#1a2030");
-  wg.addColorStop(1, "#090c14");
-  ctx.fillStyle = wg;
+  const horizonY = H * 0.4;
+  const cx = W / 2;
+  const roadHalfBottom = Math.min(W * 0.62, W / 2 - 10);
+  const halfAt = (y) => roadHalfBottom * clamp((y - horizonY) / (H - horizonY), 0, 1);
+
+  // sky → warm horizon
+  const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+  sky.addColorStop(0, "#0c0f1a");
+  sky.addColorStop(1, "#6b4a16");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, horizonY);
+  // dark ground either side of the road
+  const gnd = ctx.createLinearGradient(0, horizonY, 0, H);
+  gnd.addColorStop(0, "#2b2009");
+  gnd.addColorStop(1, "#0d0a04");
+  ctx.fillStyle = gnd;
+  ctx.fillRect(0, horizonY, W, H - horizonY);
+  // sun glow at the vanishing point
+  const glow = ctx.createRadialGradient(cx, horizonY, 0, cx, horizonY, Math.min(W, H) * 0.55);
+  glow.addColorStop(0, "rgba(255,214,110,0.55)");
+  glow.addColorStop(0.5, "rgba(255,196,86,0.12)");
+  glow.addColorStop(1, "rgba(255,196,86,0)");
+  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
-  // riveted panel seams
-  ctx.strokeStyle = "rgba(255,255,255,0.035)";
+
+  // road surface (trapezoid to the vanishing point)
+  ctx.beginPath();
+  ctx.moveTo(cx - halfAt(H), H);
+  ctx.lineTo(cx, horizonY);
+  ctx.lineTo(cx + halfAt(H), H);
+  ctx.closePath();
+  const rg = ctx.createLinearGradient(0, horizonY, 0, H);
+  rg.addColorStop(0, "#fff1c2");
+  rg.addColorStop(0.5, "#e6b53e");
+  rg.addColorStop(1, "#b9882a");
+  ctx.fillStyle = rg;
+  ctx.fill();
+
+  // brick courses in perspective (clipped to the road)
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = "rgba(120,84,14,0.55)";
   ctx.lineWidth = 1;
-  const grid = Math.max(110, Math.min(W, H) / 6);
-  for (let x = grid / 2; x < W; x += grid) {
+  let y = H;
+  let gap = (H - horizonY) * 0.15;
+  let row = 0;
+  while (y > horizonY + 2) {
+    const half = halfAt(y) || 0.0001;
+    // horizontal mortar line
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
+    ctx.moveTo(cx - half, y);
+    ctx.lineTo(cx + half, y);
     ctx.stroke();
+    // vertical seams, offset every other course, converging toward the horizon
+    const nb = 10;
+    const bw = (2 * half) / nb;
+    const ny = Math.max(horizonY, y - gap);
+    const nhalf = halfAt(ny) || 0.0001;
+    const off = row % 2 ? bw / 2 : 0;
+    for (let b = 0; b <= nb; b++) {
+      const x = cx - half + off + b * bw;
+      if (x <= cx - half || x >= cx + half) continue;
+      const nx = cx + (x - cx) * (nhalf / half); // converge
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(nx, ny);
+      ctx.stroke();
+    }
+    y -= gap;
+    gap *= 0.82;
+    row++;
   }
-  for (let y = grid / 2; y < H; y += grid) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
-  }
-  // the great round vault door, framed behind the register
-  drawVaultDoor(W / 2, H * 0.43, Math.min(W, H) * 0.46);
-  // stacks of gold bars in the lower corners
-  const by = H * 0.92;
-  drawGoldBarStack(W * 0.12, by);
-  drawGoldBarStack(W * 0.88, by);
-}
+  ctx.restore();
 
-function drawVaultDoor(cx, cy, R) {
-  // warm glow leaking from a vault full of gold
-  const gl = ctx.createRadialGradient(cx, cy, R * 0.12, cx, cy, R * 1.15);
-  gl.addColorStop(0, "rgba(255,200,90,0.20)");
-  gl.addColorStop(1, "rgba(255,200,90,0)");
-  ctx.fillStyle = gl;
+  // glowing road edges
+  ctx.strokeStyle = "rgba(255,247,205,0.55)";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(cx, cy, R * 1.15, 0, Math.PI * 2);
-  ctx.fill();
-
-  const ring = (rad, light, dark) => {
-    const g = ctx.createRadialGradient(cx - rad * 0.35, cy - rad * 0.35, rad * 0.1, cx, cy, rad);
-    g.addColorStop(0, light);
-    g.addColorStop(1, dark);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  ring(R, "#586781", "#1f2734"); // outer steel
-  ring(R * 0.9, "#f3d178", "#8a6418"); // brass band
-  ring(R * 0.82, "#4e576c", "#1b2230"); // inner steel face
-
-  // perimeter bolts
-  ctx.fillStyle = "#cdd6e6";
-  const bolts = 24;
-  for (let i = 0; i < bolts; i++) {
-    const a = (i / bolts) * Math.PI * 2;
-    const bx = cx + Math.cos(a) * R * 0.95;
-    const byy = cy + Math.sin(a) * R * 0.95;
-    ctx.beginPath();
-    ctx.arc(bx, byy, R * 0.012, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // central handwheel: brass rim, spokes, hub
-  const wr = R * 0.34;
-  ctx.strokeStyle = "#e6b53e";
-  ctx.lineWidth = R * 0.05;
-  ctx.beginPath();
-  ctx.arc(cx, cy, wr, 0, Math.PI * 2);
+  ctx.moveTo(cx - halfAt(H), H);
+  ctx.lineTo(cx, horizonY);
+  ctx.moveTo(cx + halfAt(H), H);
+  ctx.lineTo(cx, horizonY);
   ctx.stroke();
-  ctx.lineWidth = R * 0.03;
-  ctx.strokeStyle = "#c79a32";
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(a) * wr, cy + Math.sin(a) * wr);
-    ctx.stroke();
-  }
-  const hub = ctx.createRadialGradient(cx - wr * 0.2, cy - wr * 0.2, wr * 0.05, cx, cy, wr * 0.42);
-  hub.addColorStop(0, "#f3d178");
-  hub.addColorStop(1, "#7a5818");
-  ctx.fillStyle = hub;
-  ctx.beginPath();
-  ctx.arc(cx, cy, wr * 0.42, 0, Math.PI * 2);
-  ctx.fill();
+
+  // gold bar stacks resting on the verge
+  const by = H * 0.95;
+  drawGoldBarStack(W * 0.1, by);
+  drawGoldBarStack(W * 0.9, by);
 }
 
 function drawGoldBarStack(cx, baseY) {
@@ -350,11 +352,31 @@ function applyState(d) {
     }
     if (t.today) el.today.textContent = `today: ${fmt(t.today.tokens)} tok · ${usd(t.today.cost)}`;
     if (t.allTime) el.alltime.textContent = `all-time: ${fmt(t.allTime.tokens)} tok · ${usd(t.allTime.cost)}`;
+    if (t.profiles) renderProfiles(t.profiles);
   }
   if (d.day) state.day = d.day;
   if (d.leaderboard) state.boards.tokens = d.leaderboard;
   if (d.leaderboardCost) state.boards.cost = d.leaderboardCost;
   if (d.leaderboard || d.leaderboardCost) renderBoard();
+}
+
+function renderProfiles(list) {
+  if (!list || !list.length) {
+    el.profilesList.innerHTML = `<div class="empty">No spending yet.</div>`;
+    return;
+  }
+  el.profilesList.innerHTML = list
+    .map((p) => {
+      const v = voiceFor(p.profile);
+      const name = p.profile === "default" ? "default" : p.profile;
+      return (
+        `<div class="prow" style="--pc:${v.color}">` +
+        `<div class="pname">${esc(name)}<span class="psub">${fmt(p.session.tokens)} tok this run</span></div>` +
+        `<div class="pstat">today <b>${fmt(p.today.tokens)}</b> · ${usd(p.today.cost)}　all-time <b>${fmt(p.allTime.tokens)}</b> · ${usd(p.allTime.cost)}</div>` +
+        `</div>`
+      );
+    })
+    .join("");
 }
 
 function setBoardView(view) {
@@ -561,8 +583,8 @@ function draw(now) {
   ctx.clearRect(0, 0, W, H);
   const g = geom();
 
-  drawVault(); // steel wall, great round door, gold-bar stacks
-  drawVaultRain(); // coins pouring from the ceiling (behind the register)
+  drawVault(); // golden brick road to a glowing horizon + gold-bar stacks
+  drawVaultRain(); // coins raining from the sky (behind the register)
   drawVignette();
   drawDust();
 

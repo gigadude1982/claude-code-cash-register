@@ -54,9 +54,14 @@ function costOf(u, modelId) {
 // ── persistent stats (survive restarts) ─────────────────────────────────────────
 const LEADERBOARD_MAX = 10;
 // leaderboard = biggest by tokens; leaderboardCost = most expensive by $.
-let stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [], leaderboardCost: [] };
-let sessionTokens = 0; // this server run only
+// byProfile[p] = { allTime:{tokens,cost}, daily:{ 'YYYY-MM-DD':{tokens,cost} } }
+function freshStats() {
+  return { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [], leaderboardCost: [], byProfile: {} };
+}
+let stats = freshStats();
+let sessionTokens = 0; // this server run only (all profiles combined)
 let sessionCost = 0;
+let sessionByProfile = {}; // profile -> { tokens, cost } for this run
 
 function loadStats() {
   try {
@@ -65,6 +70,7 @@ function loadStats() {
     stats.daily = j.daily || {};
     stats.leaderboard = Array.isArray(j.leaderboard) ? j.leaderboard : [];
     stats.leaderboardCost = Array.isArray(j.leaderboardCost) ? j.leaderboardCost : [];
+    stats.byProfile = j.byProfile && typeof j.byProfile === "object" ? j.byProfile : {};
   } catch {
     /* first run */
   }
@@ -89,12 +95,30 @@ const boards = () => ({
   leaderboard: stats.leaderboard.slice(0, 5),
   leaderboardCost: stats.leaderboardCost.slice(0, 5),
 });
+function profileTotals() {
+  const keys = new Set([...Object.keys(stats.byProfile), ...Object.keys(sessionByProfile)]);
+  const out = [];
+  for (const p of keys) {
+    const bp = stats.byProfile[p] || { allTime: { tokens: 0, cost: 0 }, daily: {} };
+    const d = bp.daily[today()] || { tokens: 0, cost: 0 };
+    const s = sessionByProfile[p] || { tokens: 0, cost: 0 };
+    out.push({
+      profile: p,
+      session: { tokens: s.tokens, cost: s.cost },
+      today: { tokens: d.tokens, cost: d.cost },
+      allTime: { tokens: bp.allTime.tokens, cost: bp.allTime.cost },
+    });
+  }
+  out.sort((a, b) => b.allTime.tokens - a.allTime.tokens);
+  return out;
+}
 function totalsSnapshot() {
   const d = stats.daily[today()] || { tokens: 0, cost: 0 };
   return {
-    session: { tokens: sessionTokens, cost: sessionCost },
+    session: { tokens: sessionTokens, cost: sessionCost }, // all profiles combined
     today: { tokens: d.tokens, cost: d.cost },
     allTime: { tokens: stats.allTime.tokens, cost: stats.allTime.cost },
+    profiles: profileTotals(), // per-profile breakdown
   };
 }
 
@@ -120,6 +144,18 @@ function recordTurn(tokens, cost, model, label, profile) {
   d.cost += cost;
   stats.allTime.tokens += tokens;
   stats.allTime.cost += cost;
+
+  // per-profile totals (session / today / all-time)
+  const p = profile || "default";
+  const bp = stats.byProfile[p] || (stats.byProfile[p] = { allTime: { tokens: 0, cost: 0 }, daily: {} });
+  bp.allTime.tokens += tokens;
+  bp.allTime.cost += cost;
+  const bpd = bp.daily[today()] || (bp.daily[today()] = { tokens: 0, cost: 0 });
+  bpd.tokens += tokens;
+  bpd.cost += cost;
+  const sp = sessionByProfile[p] || (sessionByProfile[p] = { tokens: 0, cost: 0 });
+  sp.tokens += tokens;
+  sp.cost += cost;
 
   const ts = Date.now();
   const entry = { tokens, cost, model, label: label || "", profile: profile || "default", ts };
@@ -440,9 +476,10 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === "/reset") {
-    stats = { allTime: { tokens: 0, cost: 0 }, daily: {}, leaderboard: [], leaderboardCost: [] };
+    stats = freshStats();
     sessionTokens = 0;
     sessionCost = 0;
+    sessionByProfile = {};
     saveStats();
     const snap = { ...accountPayload(), totals: totalsSnapshot(), ...boards(), day: today() };
     broadcast("hello", snap);
