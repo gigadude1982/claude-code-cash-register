@@ -67,7 +67,7 @@ into Claude's context); it only fires a background `curl`.
 ## Run it
 
 ```bash
-npm start          # starts the server on http://127.0.0.1:4321 and opens your browser
+npm start          # starts the server on http://127.0.0.1:4337 and opens your browser
 ```
 
 Then just use Claude Code as normal. Every request that spends tokens triggers a
@@ -112,27 +112,27 @@ Claude under any profile as normal. Tune the per-profile colours/sounds in
 ### Test without spending tokens
 
 ```bash
-curl "http://127.0.0.1:4321/burst?tokens=42000"                 # small/medium/big/JACKPOT by amount
-curl "http://127.0.0.1:4321/burst?tokens=90000&model=opus&label=huge+refactor"  # labelled jackpot
-curl "http://127.0.0.1:4321/burst?tokens=12000&profile=work"    # test the work profile's sound/colour
-curl "http://127.0.0.1:4321/alert?message=Permission+needed"    # red siren + buzzer
-curl "http://127.0.0.1:4321/newday"                             # simulate midnight rollover (chime)
-curl "http://127.0.0.1:4321/stats"                              # JSON of totals + both leaderboards
-curl "http://127.0.0.1:4321/reset"                              # wipe totals + leaderboards
+curl "http://127.0.0.1:4337/burst?tokens=42000"                 # small/medium/big/JACKPOT by amount
+curl "http://127.0.0.1:4337/burst?tokens=90000&model=opus&label=huge+refactor"  # labelled jackpot
+curl "http://127.0.0.1:4337/burst?tokens=12000&profile=work"    # test the work profile's sound/colour
+curl "http://127.0.0.1:4337/alert?message=Permission+needed"    # red siren + buzzer
+curl "http://127.0.0.1:4337/newday"                             # simulate midnight rollover (chime)
+curl "http://127.0.0.1:4337/stats"                              # JSON of totals + both leaderboards
+curl "http://127.0.0.1:4337/reset"                              # wipe totals + leaderboards
 npm run test:burst 1500
 ```
 
 ### Browser URL options
 
-- `http://127.0.0.1:4321/?board=cost` — open straight to the cost leaderboard
-- `http://127.0.0.1:4321/?nogate` — skip the click-to-enable-sound overlay (for
+- `http://127.0.0.1:4337/?board=cost` — open straight to the cost leaderboard
+- `http://127.0.0.1:4337/?nogate` — skip the click-to-enable-sound overlay (for
   an always-on, muted dashboard on a second monitor)
 
 ## Configuration
 
 | Env var               | Default                     | Meaning                                  |
 | --------------------- | --------------------------- | ---------------------------------------- |
-| `CASH_REGISTER_PORT`  | `4321`                      | Port for server + forwarder              |
+| `CASH_REGISTER_PORT`  | `4337`                      | Port for server + forwarder              |
 | `REAL_STATUSLINE`     | `~/.claude/statusline.sh`   | Your original statusLine script to chain |
 | `NO_OPEN`             | _(unset)_                   | Set to skip auto-opening the browser     |
 

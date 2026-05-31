@@ -16,7 +16,7 @@ while [ -h "$SOURCE" ]; do
 done
 DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
-PORT="${CASH_REGISTER_PORT:-4321}"
+PORT="${CASH_REGISTER_PORT:-4337}"
 URL="http://127.0.0.1:${PORT}"
 
 if command -v lsof >/dev/null 2>&1 && lsof -ti ":${PORT}" >/dev/null 2>&1; then

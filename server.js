@@ -15,7 +15,7 @@ import { dirname, join, extname } from "node:path";
 import { homedir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.CASH_REGISTER_PORT) || 4321;
+const PORT = Number(process.env.CASH_REGISTER_PORT) || 4337;
 const PUBLIC_DIR = join(__dirname, "public");
 const DATA_FILE = join(__dirname, "data", "stats.json");
 

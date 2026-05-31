@@ -11,7 +11,7 @@
 
 input=$(cat)
 
-PORT="${CASH_REGISTER_PORT:-4321}"
+PORT="${CASH_REGISTER_PORT:-4337}"
 REAL_STATUSLINE="${REAL_STATUSLINE:-$HOME/.claude/statusline.sh}"
 
 # Which Claude profile is this? Derived from the active config dir name

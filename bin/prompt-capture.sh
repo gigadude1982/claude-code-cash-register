@@ -9,7 +9,7 @@
 # So this script prints NOTHING to stdout — it only fires a background curl.
 
 input=$(cat)
-PORT="${CASH_REGISTER_PORT:-4321}"
+PORT="${CASH_REGISTER_PORT:-4337}"
 
 _cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 _base="$(basename "$_cfg")"

@@ -8,7 +8,7 @@
 # Hooks must stay out of the way: short curl timeout, backgrounded, always exit 0.
 
 input=$(cat)
-PORT="${CASH_REGISTER_PORT:-4321}"
+PORT="${CASH_REGISTER_PORT:-4337}"
 
 _cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 _base="$(basename "$_cfg")"
