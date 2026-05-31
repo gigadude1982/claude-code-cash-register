@@ -48,6 +48,13 @@ let sparks = [];
 const dust = []; // ambient floating gold motes
 const rain = []; // coins endlessly pouring from the vault ceiling (background)
 
+// The register stays dormant until the user clicks "enable" (or ?nogate): the
+// board still tracks live totals, but no bursts/spins/siren/sound fire. Spend
+// that lands while dormant is banked so we can replay one catch-up burst on
+// enable. See the sound-gate handler in the boot section.
+let armed = false;
+const pending = { tokens: 0, cost: 0 };
+
 const state = {
   account: "Claude Code",
   model: "—",
@@ -272,7 +279,7 @@ function drawVault(g) {
       ctx.stroke();
     }
     y -= gap;
-    gap *= 0.84;
+    gap = Math.max(gap * 0.84, 3); // floor the gap so y always reaches the horizon (no infinite loop)
     row++;
   }
   ctx.restore();
@@ -436,6 +443,15 @@ function renderBoard(flashTs) {
 function fireBurst(d) {
   const tokens = Math.max(0, Math.round(d.turnTokens || 0));
   if (tokens <= 0) return;
+  // Dormant: keep the board totals current, bank the spend for a catch-up
+  // burst, but fire none of the animation/sound until the register is armed.
+  if (!armed) {
+    applyState(d);
+    renderBoard(d.entryTs);
+    pending.tokens += tokens;
+    pending.cost += Number(d.cost) || 0;
+    return;
+  }
   stopAlert(d.profile); // this profile resumed → silence its "needs input" alarm
   const turnCost = Number(d.cost) || 0;
   const voice = voiceFor(d.profile);
@@ -1218,6 +1234,7 @@ function onNewDay(d) {
   state.day = d.date;
   // today's running total resets to zero at the rollover
   el.today.textContent = `today: 0 tok · $0.00`;
+  if (!armed) return; // dormant: roll the day silently, no popup/chime
   const prev = d.previous || { tokens: 0, cost: 0 };
   state.popup = {
     text: `🌅 NEW DAY — yesterday: ${fmt(prev.tokens)} tok · ${usd(prev.cost)}`,
@@ -1246,6 +1263,7 @@ function renderSirenBanner() {
     .join("&nbsp;&nbsp;·&nbsp;&nbsp;");
 }
 function showSiren(d) {
+  if (!armed) return; // dormant until enabled — no alarms
   const profile = d.profile || "default";
   const msg = (d.message || "Claude needs your input").toUpperCase();
   el.siren.classList.add("on");
@@ -1352,22 +1370,39 @@ function esc(s) {
 }
 
 // ── boot ─────────────────────────────────────────────────────────────────────
-el.enableSound.addEventListener("click", () => {
-  initAudio();
+// Bring the register to life: start reacting to events and replay one summary
+// burst for whatever spend piled up while it was dormant.
+function arm() {
+  if (armed) return;
+  armed = true;
   el.soundGate.classList.add("hidden");
+  if (pending.tokens > 0) {
+    fireBurst({
+      turnTokens: pending.tokens,
+      cost: pending.cost,
+      model: state.model,
+      promptLabel: "while you were away",
+    });
+    pending.tokens = 0;
+    pending.cost = 0;
+  }
+}
+el.enableSound.addEventListener("click", () => {
+  initAudio(); // unmute, then arm
+  arm();
 });
 el.tabTokens.addEventListener("click", () => setBoardView("tokens"));
 el.tabCost.addEventListener("click", () => setBoardView("cost"));
-// allow muted viewing too: dismiss on any key
+// allow muted viewing too: Escape arms the register without enabling sound
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") el.soundGate.classList.add("hidden");
+  if (e.key === "Escape") arm();
 });
 
 // URL conveniences: ?board=cost picks the cost leaderboard; ?nogate skips the
-// click-to-enable-sound overlay (handy for an always-on dashboard, muted).
+// click-to-enable-sound overlay and arms muted (handy for an always-on dashboard).
 const params = new URLSearchParams(location.search);
 if (params.get("board") === "cost") setBoardView("cost");
-if (params.has("nogate")) el.soundGate.classList.add("hidden");
+if (params.has("nogate")) arm();
 
 resize();
 requestAnimationFrame(frame);
