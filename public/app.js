@@ -23,6 +23,8 @@ const el = {
   enableSound: document.getElementById("enable-sound"),
   siren: document.getElementById("siren"),
   sirenText: document.getElementById("siren-text"),
+  mute: document.getElementById("mute"),
+  clearAlert: document.getElementById("clear-alert"),
 };
 
 // ── responsive canvas ───────────────────────────────────────────────────────
@@ -294,6 +296,9 @@ function drawVault(g) {
   ctx.lineTo(cx, horizonY);
   ctx.stroke();
 
+  // gold brick walls rising from the road edges, framing the register
+  drawBrickWalls(horizonY, cx, roadHalfBottom);
+
   // the register casts a warm pool of light onto the bricks beneath it
   if (g) {
     const lx = g.cx;
@@ -315,6 +320,79 @@ function drawVault(g) {
   const by = H * 0.95;
   drawGoldBarStack(W * 0.1, by);
   drawGoldBarStack(W * 0.9, by);
+}
+
+// Two gold-brick walls standing on the road edges and receding to the vanishing
+// point, turning the golden road into a vault corridor around the register. The
+// geometry is a perspective trick: each wall is a triangle whose base is the road
+// edge and whose apex is the horizon (height shrinks to 0 there). Because the
+// foreshortening is linear in depth, brick courses and seams are straight lines.
+function drawBrickWalls(horizonY, cx, roadHalfBottom) {
+  const depth = H - horizonY;
+  const wallH = depth * 0.6; // foreground wall height in px
+  // t = 0 at the horizon, 1 at the foreground edge of the screen
+  const baseX = (side, t) => cx + side * roadHalfBottom * t;
+  const baseY = (t) => horizonY + t * depth;
+  const topY = (t) => baseY(t) - wallH * t;
+
+  for (const side of [-1, 1]) {
+    const fx = baseX(side, 1); // front (foreground) inner edge x
+    const fyB = baseY(1); // front base y (= H)
+    const fyT = topY(1); // front top y
+
+    ctx.save();
+    // wall face: triangle from the horizon apex out to the front edge
+    ctx.beginPath();
+    ctx.moveTo(cx, horizonY);
+    ctx.lineTo(fx, fyB);
+    ctx.lineTo(fx, fyT);
+    ctx.closePath();
+    const wg = ctx.createLinearGradient(0, fyT, 0, fyB);
+    wg.addColorStop(0, "#ffe9a8");
+    wg.addColorStop(0.5, "#d9a93a");
+    wg.addColorStop(1, "#8a5f1a");
+    ctx.fillStyle = wg;
+    ctx.fill();
+    // shade so the vertical face reads darker than the bright floor; the left
+    // wall catches a touch more of the central glow than the right
+    ctx.fillStyle = side < 0 ? "rgba(0,0,0,0.10)" : "rgba(0,0,0,0.17)";
+    ctx.fill();
+
+    // clip bricks to the wall
+    ctx.clip();
+    // horizontal courses fanning from the horizon apex to the front edge
+    ctx.strokeStyle = "rgba(90,60,10,0.55)";
+    ctx.lineWidth = 1;
+    const courses = 7;
+    for (let k = 0; k <= courses; k++) {
+      const f = k / courses;
+      ctx.beginPath();
+      ctx.moveTo(cx, horizonY);
+      ctx.lineTo(fx, fyB - wallH * f);
+      ctx.stroke();
+    }
+    // vertical seams (true verticals in screen space), bunching toward horizon,
+    // offset every other depth band for a staggered bricky bond
+    ctx.strokeStyle = "rgba(70,46,8,0.5)";
+    const seams = [0.12, 0.2, 0.3, 0.42, 0.56, 0.72, 0.9];
+    seams.forEach((t, i) => {
+      const x = baseX(side, t);
+      const yLo = baseY(t);
+      const yHi = i % 2 ? topY(t) : topY(t) + wallH * t * 0.5; // alternate half/full seams
+      ctx.beginPath();
+      ctx.moveTo(x, yLo);
+      ctx.lineTo(x, yHi);
+      ctx.stroke();
+    });
+    // beveled highlight along the top edge for a 3D cap
+    ctx.strokeStyle = "rgba(255,247,205,0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, horizonY);
+    ctx.lineTo(fx, fyT);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawGoldBarStack(cx, baseY) {
@@ -1151,9 +1229,19 @@ function drawPopup(g) {
 
 // ── audio (Web Audio synth, no asset files) ──────────────────────────────────
 let audio = null;
+let muted = false; // mute button silences all synth sound; animation keeps playing
 function initAudio() {
   if (audio) return;
   audio = new (window.AudioContext || window.webkitAudioContext)();
+}
+function setMuted(m) {
+  muted = m;
+  el.mute.textContent = m ? "🔇" : "🔊";
+  el.mute.setAttribute("aria-pressed", String(m));
+  el.mute.title = m ? "Unmute sounds" : "Mute sounds";
+  try {
+    localStorage.setItem("ccr-muted", m ? "1" : "0");
+  } catch {}
 }
 function tone(freq, t0, dur, type, gain) {
   const o = audio.createOscillator();
@@ -1168,7 +1256,7 @@ function tone(freq, t0, dur, type, gain) {
   o.stop(t0 + dur + 0.02);
 }
 function playChaChing(n, inten, profile) {
-  if (!audio) return;
+  if (!audio || muted) return;
   const m = voiceFor(profile).chMul; // per-profile pitch shift
   const t = audio.currentTime;
   // the "cha-ching" two-note bell
@@ -1184,7 +1272,7 @@ function playChaChing(n, inten, profile) {
   }
 }
 function playFanfare(profile) {
-  if (!audio) return;
+  if (!audio || muted) return;
   const m = voiceFor(profile).chMul;
   const t = audio.currentTime;
   // a rising major arpeggio for a brand-new record
@@ -1193,7 +1281,7 @@ function playFanfare(profile) {
   });
 }
 function playBuzzer(volScale = 1, profile) {
-  if (!audio) return;
+  if (!audio || muted) return;
   const v = voiceFor(profile);
   const peak = 0.45 * clamp(volScale, 0, 1); // escalating loudness
   const t = audio.currentTime;
@@ -1222,7 +1310,7 @@ function playBuzzer(volScale = 1, profile) {
 }
 
 function playDayChime() {
-  if (!audio) return;
+  if (!audio || muted) return;
   const t = audio.currentTime;
   // gentle bright triad sweep — "a fresh day, the register resets"
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
@@ -1393,6 +1481,17 @@ el.enableSound.addEventListener("click", () => {
 });
 el.tabTokens.addEventListener("click", () => setBoardView("tokens"));
 el.tabCost.addEventListener("click", () => setBoardView("cost"));
+// mute toggle — silence all sound but keep the show running. stopPropagation so
+// the window pointerdown handler (which clears alerts) doesn't double-fire here.
+el.mute.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setMuted(!muted);
+});
+// explicit override: stop every buzzing alarm without waiting to answer Claude
+el.clearAlert.addEventListener("click", (e) => {
+  e.stopPropagation();
+  stopAlert();
+});
 // allow muted viewing too: Escape arms the register without enabling sound
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") arm();
@@ -1403,6 +1502,12 @@ window.addEventListener("keydown", (e) => {
 const params = new URLSearchParams(location.search);
 if (params.get("board") === "cost") setBoardView("cost");
 if (params.has("nogate")) arm();
+// restore the saved mute preference (?muted also forces it on)
+try {
+  setMuted(localStorage.getItem("ccr-muted") === "1" || params.has("muted"));
+} catch {
+  setMuted(params.has("muted"));
+}
 
 resize();
 requestAnimationFrame(frame);

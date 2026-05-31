@@ -92,6 +92,23 @@ body {
   box-shadow: inset 0 0 8px #ffcf3f22;
 }
 
+/* mute toggle lives among the HUD pills */
+.pill.mute {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.pill.mute:hover {
+  border-color: #ffcf3f88;
+}
+.pill.mute[aria-pressed="true"] {
+  color: var(--bad);
+  border-color: #ff5d6c66;
+  background: #ff5d6c14;
+}
+
 .dot {
   width: 9px;
   height: 9px;
@@ -388,6 +405,30 @@ main {
   animation: sirenpulse 0.7s ease-in-out infinite;
   white-space: nowrap;
 }
+/* explicit override: clear the buzzing alarm without answering Claude */
+#clear-alert {
+  position: absolute;
+  top: calc(14% + 70px);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #11151fcc;
+  border: 2px solid #ff5566;
+  border-radius: 10px;
+  padding: 9px 18px;
+  box-shadow: 0 6px 24px #0009;
+}
+#clear-alert:hover {
+  background: #1c2230ee;
+  border-color: #ff8a93;
+}
+
 @keyframes sirensweep {
   to {
     transform: rotate(360deg);
