@@ -23,7 +23,8 @@ const el = {
   enableSound: document.getElementById("enable-sound"),
   siren: document.getElementById("siren"),
   sirenText: document.getElementById("siren-text"),
-  mute: document.getElementById("mute"),
+  muteChaching: document.getElementById("mute-chaching"),
+  muteBuzzer: document.getElementById("mute-buzzer"),
   clearAlert: document.getElementById("clear-alert"),
 };
 
@@ -40,6 +41,8 @@ function resize() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   seedDust();
   seedRain();
+  seedWallSigns();
+  seedMoneyFall();
 }
 window.addEventListener("resize", resize);
 
@@ -49,6 +52,9 @@ const coins = [];
 let sparks = [];
 const dust = []; // ambient floating gold motes
 const rain = []; // coins endlessly pouring from the vault ceiling (background)
+const wallSigns = []; // green $ glyphs streaming down the brick walls into the sunset
+const moneyFall = []; // 💰 bags, 💵 bills, and green $ signs drifting down the scene
+const MONEY_KINDS = ["💰", "💵", "💴", "$", "$"]; // weighted a little toward $ signs
 
 // The register stays dormant until the user clicks "enable" (or ?nogate): the
 // board still tracks live totals, but no bursts/spins/siren/sound fire. Spend
@@ -200,6 +206,56 @@ function drawVaultRain() {
   ctx.globalAlpha = 1;
 }
 
+// ── falling money (💰 bags, 💵 bills, green $ signs) tumbling down the scene ───
+function resetMoneyItem(m, atTop) {
+  const depth = Math.random(); // 0 far/small/slow → 1 near/big/fast (parallax)
+  m.kind = MONEY_KINDS[(Math.random() * MONEY_KINDS.length) | 0];
+  m.x = Math.random() * W;
+  m.y = atTop ? rand(-70, -10) : Math.random() * H;
+  m.size = 16 + depth * 30;
+  m.vy = 0.6 + depth * 1.9;
+  m.vx = rand(-0.3, 0.3);
+  m.rot = rand(-0.4, 0.4);
+  m.vrot = rand(-0.025, 0.025);
+  m.sway = rand(0, Math.PI * 2);
+  m.swaySpeed = rand(0.01, 0.03);
+  m.alpha = 0.4 + depth * 0.5;
+}
+function seedMoneyFall() {
+  moneyFall.length = 0;
+  const count = clamp(Math.round(W / 60), 8, 40);
+  for (let i = 0; i < count; i++) {
+    const m = {};
+    resetMoneyItem(m, false);
+    moneyFall.push(m);
+  }
+}
+function drawMoneyFall() {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const m of moneyFall) {
+    ctx.globalAlpha = m.alpha;
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.rot);
+    if (m.kind === "$") {
+      // glowing green dollar sign with a gold edge
+      ctx.font = `bold ${Math.round(m.size)}px Georgia, "Times New Roman", serif`;
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(1.5, m.size * 0.12);
+      ctx.strokeStyle = "#ffd35a";
+      ctx.strokeText("$", 0, 0);
+      ctx.fillStyle = "#2ecc71";
+      ctx.fillText("$", 0, 0);
+    } else {
+      ctx.font = `${Math.round(m.size)}px serif`;
+      ctx.fillText(m.kind, 0, 0);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
 // A golden brick road receding to a glowing horizon, the register sitting on it.
 function drawVault(g) {
   const horizonY = H * 0.4;
@@ -227,6 +283,10 @@ function drawVault(g) {
   glow.addColorStop(1, "rgba(255,196,86,0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
+  // giant sunset aura blooming behind the register
+  drawSunsetAura();
+  // giant green dollar signs standing along the horizon
+  drawHorizonSigns();
 
   // road surface (trapezoid to the vanishing point)
   ctx.beginPath();
@@ -298,6 +358,8 @@ function drawVault(g) {
 
   // gold brick walls rising from the road edges, framing the register
   drawBrickWalls(horizonY, cx, roadHalfBottom);
+  // gold-bordered green dollar emblems mounted down the walls toward the sunset
+  drawWallSigns();
 
   // the register casts a warm pool of light onto the bricks beneath it
   if (g) {
@@ -393,6 +455,128 @@ function drawBrickWalls(horizonY, cx, roadHalfBottom) {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+// Shared wall geometry (mirrors the perspective trick in drawBrickWalls): the two
+// gold-brick walls stand on the road edges and recede to the vanishing point at
+// (cx, horizonY). t = 1 is the foreground edge of the screen, t → 0 the horizon.
+function wallGeom() {
+  const horizonY = H * 0.4;
+  const cx = W / 2;
+  const roadHalfBottom = Math.min(W * 0.62, W / 2 - 10);
+  const depth = H - horizonY;
+  const wallH = depth * 0.6;
+  return { horizonY, cx, roadHalfBottom, depth, wallH };
+}
+
+// A fixed grid of large dollar-sign emblems mounted on each wall, marching in
+// perspective down toward the vanishing point so they converge into the sunset.
+// They don't move — each is pinned at a depth band (t) and a height up the wall
+// (v), with a little jitter so the grid doesn't read as mechanical.
+function seedWallSigns() {
+  wallSigns.length = 0;
+  const depths = [0.26, 0.42, 0.6, 0.82]; // near-horizon → foreground
+  const heights = [0.34, 0.64, 0.92]; // low / mid / high on the wall face
+  for (const side of [-1, 1]) {
+    for (const t of depths) {
+      for (const v of heights) {
+        wallSigns.push({
+          side, // -1 left wall, +1 right wall
+          t: clamp(t + rand(-0.025, 0.025), 0.1, 0.9),
+          v: clamp(v + rand(-0.05, 0.05), 0.12, 1),
+        });
+      }
+    }
+  }
+}
+// One green, gold-bordered, double-struck "$" centered at (x,y).
+function drawWallDollar(x, y, size, fill = "#0c5e2c", border = "#ffd35a") {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.font = `900 ${Math.round(size)}px Georgia, "Times New Roman", serif`;
+  // dark halo so the gold border reads even against the gold brick wall
+  ctx.lineWidth = Math.max(3, size * 0.24);
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.strokeText("S", 0, 0);
+  // gold border
+  ctx.lineWidth = Math.max(2, size * 0.14);
+  ctx.strokeStyle = border;
+  ctx.strokeText("S", 0, 0);
+  // green body
+  ctx.fillStyle = fill;
+  ctx.fillText("S", 0, 0);
+  // the two vertical strikes (the "double" dollar bars), gold-edged green
+  const barW = size * 0.11;
+  const barH = size * 0.96;
+  const off = size * 0.15;
+  for (const bx of [-off, off]) {
+    rr(bx - barW / 2, -barH / 2, barW, barH, barW * 0.4);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.5, size * 0.05);
+    ctx.strokeStyle = border;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// A row of giant green dollar signs standing along the horizon, glowing behind
+// the register and flanking the sunset.
+function drawHorizonSigns() {
+  const { horizonY, cx } = wallGeom();
+  const size = clamp(Math.min(W, H) * 0.16, 64, 190);
+  const gap = size * 1.9;
+  const count = Math.ceil(W / gap) + 2;
+  const startX = cx - ((count - 1) / 2) * gap;
+  const y = horizonY - size * 0.28; // straddle the horizon, tops in the sky
+  // green glow halo behind each sign
+  for (let i = 0; i < count; i++) {
+    const x = startX + i * gap;
+    const gg = ctx.createRadialGradient(x, y, 0, x, y, size);
+    gg.addColorStop(0, "rgba(46,204,113,0.42)");
+    gg.addColorStop(1, "rgba(46,204,113,0)");
+    ctx.fillStyle = gg;
+    ctx.fillRect(x - size, y - size, size * 2, size * 2);
+  }
+  // the giant signs themselves — brighter green than the wall emblems
+  for (let i = 0; i < count; i++) {
+    drawWallDollar(startX + i * gap, y, size, "#1faa55", "#ffe08a");
+  }
+}
+function drawWallSigns() {
+  const { horizonY, cx, roadHalfBottom, depth, wallH } = wallGeom();
+  for (const sgn of wallSigns) {
+    const t = sgn.t;
+    const baseX = cx + sgn.side * roadHalfBottom * t; // road edge at this depth
+    const baseY = horizonY + t * depth;
+    const topY = baseY - wallH * t;
+    const x = baseX;
+    const y = baseY + (topY - baseY) * sgn.v; // v=0 base, v=1 top
+    const size = clamp(70 * t, 16, 78); // large, shrinking with depth
+    ctx.globalAlpha = clamp(0.6 + t * 0.4, 0, 1);
+    drawWallDollar(x, y, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Giant sunset aura blooming from the vanishing point, directly behind the
+// register — concentric warm bands from a white-gold core out to dusk purple.
+function drawSunsetAura() {
+  const { horizonY, cx } = wallGeom();
+  const cy = horizonY + H * 0.04; // sit just under the horizon, behind the body
+  const R = Math.max(W, H) * (0.62 + state.glow * 0.08); // swells a touch on a win
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  grd.addColorStop(0.0, "rgba(255,247,214,0.92)"); // white-gold core
+  grd.addColorStop(0.16, "rgba(255,214,120,0.64)"); // gold
+  grd.addColorStop(0.34, "rgba(255,150,66,0.4)"); // orange
+  grd.addColorStop(0.55, "rgba(229,86,84,0.24)"); // rose-red
+  grd.addColorStop(0.78, "rgba(120,52,108,0.12)"); // dusk purple
+  grd.addColorStop(1.0, "rgba(40,20,60,0)");
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
 }
 
 function drawGoldBarStack(cx, baseY) {
@@ -660,6 +844,15 @@ function step(dt, now) {
     if (c.y - c.r > H) resetRainCoin(c, true);
   }
 
+  // falling money — bags, bills & $ signs tumbling and swaying down the scene
+  for (const m of moneyFall) {
+    m.y += m.vy * dt;
+    m.sway += m.swaySpeed * dt;
+    m.x += (m.vx + Math.sin(m.sway) * 0.4) * dt;
+    m.rot += m.vrot * dt;
+    if (m.y - m.size > H + 20) resetMoneyItem(m, true);
+  }
+
   // ambient + burst dust
   for (let i = dust.length - 1; i >= 0; i--) {
     const m = dust[i];
@@ -706,6 +899,7 @@ function draw(now) {
 
   drawVault(g); // golden brick road to a glowing horizon + gold-bar stacks
   drawVaultRain(); // coins raining from the sky (behind the register)
+  drawMoneyFall(); // 💰 bags, 💵 bills & green $ tumbling down (behind the register)
   drawVignette();
   drawDust();
 
@@ -1229,18 +1423,31 @@ function drawPopup(g) {
 
 // ── audio (Web Audio synth, no asset files) ──────────────────────────────────
 let audio = null;
-let muted = false; // mute button silences all synth sound; animation keeps playing
+// Two independent mutes — either can be silenced on its own while the animation
+// keeps playing. cha-ching covers the win sounds (cha-ching / fanfare / day
+// chime); buzzer covers the "Claude needs your input" klaxon.
+let muteChaching = false;
+let muteBuzzer = false;
 function initAudio() {
   if (audio) return;
   audio = new (window.AudioContext || window.webkitAudioContext)();
 }
-function setMuted(m) {
-  muted = m;
-  el.mute.textContent = m ? "🔇" : "🔊";
-  el.mute.setAttribute("aria-pressed", String(m));
-  el.mute.title = m ? "Unmute sounds" : "Mute sounds";
+function setMuteChaching(m) {
+  muteChaching = m;
+  el.muteChaching.textContent = m ? "🔇 💰" : "🔊 💰";
+  el.muteChaching.setAttribute("aria-pressed", String(m));
+  el.muteChaching.title = m ? "Unmute cha-ching" : "Mute cha-ching";
   try {
-    localStorage.setItem("ccr-muted", m ? "1" : "0");
+    localStorage.setItem("ccr-mute-chaching", m ? "1" : "0");
+  } catch {}
+}
+function setMuteBuzzer(m) {
+  muteBuzzer = m;
+  el.muteBuzzer.textContent = m ? "🔇 🚨" : "🔊 🚨";
+  el.muteBuzzer.setAttribute("aria-pressed", String(m));
+  el.muteBuzzer.title = m ? "Unmute buzzer" : "Mute buzzer";
+  try {
+    localStorage.setItem("ccr-mute-buzzer", m ? "1" : "0");
   } catch {}
 }
 function tone(freq, t0, dur, type, gain) {
@@ -1256,7 +1463,7 @@ function tone(freq, t0, dur, type, gain) {
   o.stop(t0 + dur + 0.02);
 }
 function playChaChing(n, inten, profile) {
-  if (!audio || muted) return;
+  if (!audio || muteChaching) return;
   const m = voiceFor(profile).chMul; // per-profile pitch shift
   const t = audio.currentTime;
   // the "cha-ching" two-note bell
@@ -1272,7 +1479,7 @@ function playChaChing(n, inten, profile) {
   }
 }
 function playFanfare(profile) {
-  if (!audio || muted) return;
+  if (!audio || muteChaching) return;
   const m = voiceFor(profile).chMul;
   const t = audio.currentTime;
   // a rising major arpeggio for a brand-new record
@@ -1281,7 +1488,7 @@ function playFanfare(profile) {
   });
 }
 function playBuzzer(volScale = 1, profile) {
-  if (!audio || muted) return;
+  if (!audio || muteBuzzer) return;
   const v = voiceFor(profile);
   const peak = 0.45 * clamp(volScale, 0, 1); // escalating loudness
   const t = audio.currentTime;
@@ -1310,7 +1517,7 @@ function playBuzzer(volScale = 1, profile) {
 }
 
 function playDayChime() {
-  if (!audio || muted) return;
+  if (!audio || muteChaching) return;
   const t = audio.currentTime;
   // gentle bright triad sweep — "a fresh day, the register resets"
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
@@ -1481,11 +1688,16 @@ el.enableSound.addEventListener("click", () => {
 });
 el.tabTokens.addEventListener("click", () => setBoardView("tokens"));
 el.tabCost.addEventListener("click", () => setBoardView("cost"));
-// mute toggle — silence all sound but keep the show running. stopPropagation so
-// the window pointerdown handler (which clears alerts) doesn't double-fire here.
-el.mute.addEventListener("click", (e) => {
+// independent mute toggles — silence cha-ching or the buzzer on its own while the
+// show keeps running. stopPropagation so the window pointerdown handler (which
+// clears alerts) doesn't double-fire here.
+el.muteChaching.addEventListener("click", (e) => {
   e.stopPropagation();
-  setMuted(!muted);
+  setMuteChaching(!muteChaching);
+});
+el.muteBuzzer.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setMuteBuzzer(!muteBuzzer);
 });
 // explicit override: stop every buzzing alarm without waiting to answer Claude
 el.clearAlert.addEventListener("click", (e) => {
@@ -1502,12 +1714,20 @@ window.addEventListener("keydown", (e) => {
 const params = new URLSearchParams(location.search);
 if (params.get("board") === "cost") setBoardView("cost");
 if (params.has("nogate")) arm();
-// restore the saved mute preference (?muted also forces it on)
+// restore saved mute prefs. ?muted forces both on; ?mute=chaching|buzzer targets
+// just one. The legacy single key (ccr-muted) migrates to muting both.
+const muteParam = params.get("mute"); // "chaching" | "buzzer"
+let legacyMuted = false;
+let savedCha = null;
+let savedBuz = null;
 try {
-  setMuted(localStorage.getItem("ccr-muted") === "1" || params.has("muted"));
-} catch {
-  setMuted(params.has("muted"));
-}
+  legacyMuted = localStorage.getItem("ccr-muted") === "1";
+  savedCha = localStorage.getItem("ccr-mute-chaching");
+  savedBuz = localStorage.getItem("ccr-mute-buzzer");
+} catch {}
+const forceBoth = params.has("muted");
+setMuteChaching((savedCha != null ? savedCha === "1" : legacyMuted) || forceBoth || muteParam === "chaching");
+setMuteBuzzer((savedBuz != null ? savedBuz === "1" : legacyMuted) || forceBoth || muteParam === "buzzer");
 
 resize();
 requestAnimationFrame(frame);

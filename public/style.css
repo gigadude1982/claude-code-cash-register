@@ -348,8 +348,23 @@ main {
   align-items: center;
   z-index: 2;
 }
+#last-event {
+  flex: 1;
+  min-width: 0;
+}
 #last-event b {
   color: var(--gold);
+}
+#credit {
+  flex: none;
+  padding-left: 16px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+#credit::before {
+  content: "💰 ";
 }
 
 /* ── red cop-light siren (shown when Claude needs input) ───────────────────── */
