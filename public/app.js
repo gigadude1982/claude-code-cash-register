@@ -77,7 +77,11 @@ const state = {
   glow: 0, // 0..1 register glow
   drawer: 0, // 0..1 drawer open amount
   bell: 0, // 0..1 bell flash
+  lever: 0, // -0.3..1 slot-lever pull; spring-yanked on every cha-ching
+  leverV: 0, // lever spring velocity
   reels: [0, 0, 0].map(() => ({ symbol: 0, spinUntil: 0, offset: 0, speed: 0 })),
+  spin: null, // current reel spin awaiting a triple-match check { evalAt, done, profile }
+  jackpot: null, // active triple-match mega-dispense { until, profile }
   lastTier: 0,
   popup: null, // { text, life, color }
 };
@@ -702,6 +706,52 @@ function renderBoard(flashTs) {
     .join("");
 }
 
+// Spit coins out of the register's mouth. `powMul` scales launch power, `spread`
+// widens the fan. Shared by the normal burst and the jackpot torrent.
+function dispenseCoins(g, count, powMul, spread) {
+  const mouthX = g.cx;
+  const mouthY = g.by + g.bh * 0.72;
+  for (let i = 0; i < count; i++) {
+    const ang = -Math.PI / 2 + rand(-0.9, 0.9) * spread;
+    const power = rand(5, 11) * powMul;
+    coins.push({
+      x: mouthX + rand(-30, 30) * g.s,
+      y: mouthY,
+      vx: Math.cos(ang) * power + rand(-2, 2),
+      vy: Math.sin(ang) * power - rand(2, 5),
+      r: rand(9, 16) * g.s,
+      rot: rand(0, Math.PI * 2),
+      vrot: rand(-0.3, 0.3),
+      flip: rand(0, Math.PI * 2),
+      vflip: rand(0.2, 0.5),
+      life: 1,
+      hue: rand(-8, 14),
+    });
+  }
+  if (coins.length > 1500) coins.splice(0, coins.length - 1500);
+}
+
+// All three reels lined up → an insane payout: a sustained coin torrent (see the
+// emitter in step()), max shake/glow, a fresh lever yank, and a triumphant sound.
+function triggerJackpot(now, profile) {
+  state.jackpot = { until: now + 2800, profile };
+  state.shake = Math.max(state.shake, 36);
+  state.glow = 1;
+  state.bell = 1;
+  state.drawer = 1;
+  state.lever = 1; // yank again as the coins explode
+  state.leverV = 0;
+  const g = geom();
+  spawnDustBurst(g, 1);
+  dispenseCoins(g, 220, 1.7, 1.25); // opening blast; the emitter keeps it pouring
+  state.popup = {
+    text: "💎💰 JACKPOT — TRIPLE MATCH! 💰💎",
+    life: 1.9,
+    color: "#ffe25a",
+  };
+  playJackpotSound(profile);
+}
+
 function fireBurst(d) {
   const tokens = Math.max(0, Math.round(d.turnTokens || 0));
   if (tokens <= 0) return;
@@ -737,38 +787,28 @@ function fireBurst(d) {
   state.drawer = 1;
   state.bell = 1;
 
-  // reels spin; jackpot lands on a matched triple
+  // cha-ching yanks the slot lever (see step()'s lever spring + drawLever)
+  state.lever = 1;
+  state.leverV = 0;
+
+  // reels spin; a top-tier jackpot lands on a matched triple. Lower turns get
+  // random symbols — but if they happen to line up, the triple-match payout
+  // (evaluated in step() when the reels settle) still fires.
   const now = performance.now();
   const jackpot = tier >= 4;
   const matched = Math.floor(rand(3, REEL_SYMBOLS.length)); // a "good" symbol
+  let lastSpinEnd = now;
   state.reels.forEach((r, i) => {
     r.spinUntil = now + 650 + inten * 1400 + i * 220;
     r.speed = 0.6 + inten * 0.9;
     r.target = jackpot ? matched : Math.floor(rand(0, REEL_SYMBOLS.length));
+    lastSpinEnd = Math.max(lastSpinEnd, r.spinUntil);
   });
+  state.spin = { evalAt: lastSpinEnd + 30, done: false, profile: d.profile };
 
   // coin fountain
   const g = geom();
-  const mouthX = g.cx;
-  const mouthY = g.by + g.bh * 0.72;
-  for (let i = 0; i < n; i++) {
-    const ang = -Math.PI / 2 + rand(-0.9, 0.9);
-    const power = rand(5, 11) * (0.8 + inten);
-    coins.push({
-      x: mouthX + rand(-30, 30) * g.s,
-      y: mouthY,
-      vx: Math.cos(ang) * power + rand(-2, 2),
-      vy: Math.sin(ang) * power - rand(2, 5),
-      r: rand(9, 16) * g.s,
-      rot: rand(0, Math.PI * 2),
-      vrot: rand(-0.3, 0.3),
-      flip: rand(0, Math.PI * 2),
-      vflip: rand(0.2, 0.5),
-      life: 1,
-      hue: rand(-8, 14),
-    });
-  }
-  if (coins.length > 1100) coins.splice(0, coins.length - 1100);
+  dispenseCoins(g, n, 0.8 + inten, 1);
 
   // extra gold burst of dust on big wins
   if (tier >= 3) spawnDustBurst(g, inten);
@@ -812,6 +852,16 @@ function step(dt, now) {
   state.glow *= Math.pow(0.94, dt);
   state.bell *= Math.pow(0.9, dt);
   state.drawer += ((coins.length > 0 ? 1 : 0) - state.drawer) * 0.1 * dt;
+
+  // lever spring: a cha-ching sets state.lever=1 (fully pulled); it springs back
+  // toward rest with a little recoil overshoot so the red knob visibly snaps.
+  state.leverV += -state.lever * 0.12 * dt;
+  state.leverV *= Math.pow(0.82, dt);
+  state.lever += state.leverV * dt;
+  if (state.lever < -0.3) {
+    state.lever = -0.3;
+    state.leverV = 0;
+  }
   if (state.popup) {
     state.popup.life -= 0.012 * dt;
     if (state.popup.life <= 0) state.popup = null;
@@ -880,6 +930,24 @@ function step(dt, now) {
     } else if (r.target != null) {
       r.symbol = r.target;
       r.target = null;
+    }
+  }
+
+  // once all reels have settled, check for a triple match → jackpot payout
+  if (state.spin && !state.spin.done && now >= state.spin.evalAt) {
+    state.spin.done = true;
+    const [a, b, c] = state.reels;
+    if (a.symbol === b.symbol && b.symbol === c.symbol) {
+      triggerJackpot(now, state.spin.profile);
+    }
+  }
+
+  // jackpot torrent — keep dumping coins (and a little dust) until it expires
+  if (state.jackpot) {
+    if (now >= state.jackpot.until) {
+      state.jackpot = null;
+    } else if (coins.length < 1400) {
+      dispenseCoins(geom(), 16, 1.7, 1.25);
     }
   }
 
@@ -1316,7 +1384,9 @@ function drawLever(g, now) {
   const baseX = bx - 6 * s;
   const baseY = by + bh * 0.4;
   const spinning = state.reels.some((r) => now < r.spinUntil);
-  const pull = spinning ? 0.5 : 0;
+  // the cha-ching spring (state.lever) drives the yank; while the reels are still
+  // spinning the lever rests half-pulled. clamp keeps the recoil from over-rising.
+  const pull = clamp(Math.max(state.lever, spinning ? 0.5 : 0), -0.3, 1);
   // brass mounting plate
   ctx.fillStyle = brassFill(baseX - 8 * s, baseY - 8 * s, baseY + 8 * s);
   ctx.beginPath();
@@ -1486,6 +1556,25 @@ function playFanfare(profile) {
   [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
     tone(f * m, t + i * 0.1, 0.45, "triangle", 0.22);
   });
+}
+function playJackpotSound(profile) {
+  if (!audio || muteChaching) return;
+  const m = voiceFor(profile).chMul;
+  const t = audio.currentTime;
+  // a big triumphant rising run, doubled an octave down for heft
+  const run = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98, 2093.0];
+  run.forEach((f, i) => {
+    tone(f * m, t + i * 0.08, 0.5, "triangle", 0.24);
+    tone(f * m * 0.5, t + i * 0.08, 0.5, "sine", 0.08);
+  });
+  // a couple of bright bell dings on top
+  tone(1760.0 * m, t + 0.5, 0.45, "triangle", 0.2);
+  tone(2349.3 * m, t + 0.64, 0.55, "triangle", 0.2);
+  // a long cascade of coin clinks raining for the duration of the torrent
+  for (let i = 0; i < 90; i++) {
+    const tt = t + 0.1 + Math.random() * 2.5;
+    tone(rand(2200, 4600) * m, tt, 0.05, "square", 0.045);
+  }
 }
 function playBuzzer(volScale = 1, profile) {
   if (!audio || muteBuzzer) return;
