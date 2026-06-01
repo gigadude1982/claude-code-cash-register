@@ -366,6 +366,14 @@ main {
 #credit::before {
   content: "💰 ";
 }
+#credit a {
+  color: var(--gold);
+  font-weight: 600;
+  text-decoration: none;
+}
+#credit a:hover {
+  text-decoration: underline;
+}
 
 /* ── red cop-light siren (shown when Claude needs input) ───────────────────── */
 #siren {
