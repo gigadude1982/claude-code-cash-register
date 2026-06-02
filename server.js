@@ -19,6 +19,14 @@ const PORT = Number(process.env.CASH_REGISTER_PORT) || 4337;
 const PUBLIC_DIR = join(__dirname, "public");
 const DATA_FILE = join(__dirname, "data", "stats.json");
 
+// App version, sourced from package.json so the footer stays in sync.
+let VERSION = "";
+try {
+  VERSION = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")).version || "";
+} catch {
+  /* non-fatal — footer just omits the version */
+}
+
 // ── per-session bookkeeping ───────────────────────────────────────────────────
 // We only "cha-ching" when a genuinely new request lands. The statusLine command
 // can fire several times per turn (and on idle refreshes), so we de-dupe on the
@@ -353,7 +361,7 @@ const server = http.createServer((req, res) => {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
-    const hello = { ...accountPayload(), totals: totalsSnapshot(), ...boards(), day: today() };
+    const hello = { ...accountPayload(), totals: totalsSnapshot(), ...boards(), day: today(), version: VERSION };
     res.write(`event: hello\ndata: ${JSON.stringify(hello)}\n\n`);
     clients.add(res);
     const keepAlive = setInterval(() => res.write(": ping\n\n"), 25000);
