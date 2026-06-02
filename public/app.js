@@ -76,7 +76,8 @@ const state = {
   // animation
   shake: 0,
   glow: 0, // 0..1 register glow
-  drawer: 0, // 0..1 drawer open amount
+  drawer: 0, // 0..1 till slide-out amount (0 shut, 1 fully ejected, can overshoot)
+  drawerV: 0, // till spring velocity — kicked out on a burst, snaps shut after
   bell: 0, // 0..1 bell flash
   lever: 0, // -0.3..1 slot-lever pull; spring-yanked on every cha-ching
   leverV: 0, // lever spring velocity
@@ -572,13 +573,40 @@ function drawWallSigns() {
 function drawSunsetAura() {
   const { horizonY, cx } = wallGeom();
   const cy = horizonY + H * 0.04; // sit just under the horizon, behind the body
-  const R = Math.max(W, H) * (0.62 + state.glow * 0.08); // swells a touch on a win
+
+  // ── radiating gold sun rays, slowly wheeling and pulsing (drawn first) ──
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter"; // additive, so overlaps blaze brighter
+  const rayCount = 20;
+  const rayLen = Math.max(W, H) * (0.9 + state.glow * 0.2);
+  for (let i = 0; i < rayCount; i++) {
+    const a = (i / rayCount) * Math.PI * 2 + t * 0.05; // slow wheel
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.9 + i * 1.7); // each beam breathes
+    const halfW = (0.018 + 0.016 * pulse) * Math.PI; // angular half-width
+    const alpha = (0.05 + 0.07 * pulse) * (0.75 + state.glow * 0.6);
+    const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rayLen);
+    rg.addColorStop(0, `rgba(255,240,176,${alpha})`);
+    rg.addColorStop(0.5, `rgba(255,205,90,${alpha * 0.45})`);
+    rg.addColorStop(1, "rgba(255,196,86,0)");
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, rayLen, a - halfW, a + halfW);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ── soft concentric sunset bloom over the rays: brighter, warmer core ──
+  const R = Math.max(W, H) * (0.64 + state.glow * 0.1); // swells a touch on a win
   const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-  grd.addColorStop(0.0, "rgba(255,247,214,0.92)"); // white-gold core
-  grd.addColorStop(0.16, "rgba(255,214,120,0.6)"); // gold
-  grd.addColorStop(0.34, "rgba(150,205,96,0.4)"); // green-gold
-  grd.addColorStop(0.55, "rgba(56,168,104,0.26)"); // emerald
-  grd.addColorStop(0.78, "rgba(30,96,80,0.13)"); // jade dusk
+  grd.addColorStop(0.0, "rgba(255,251,228,0.99)"); // blazing white-gold core
+  grd.addColorStop(0.1, "rgba(255,233,150,0.82)"); // bright gold
+  grd.addColorStop(0.26, "rgba(255,206,104,0.5)"); // gold
+  grd.addColorStop(0.42, "rgba(168,210,102,0.38)"); // green-gold
+  grd.addColorStop(0.6, "rgba(56,168,104,0.26)"); // emerald
+  grd.addColorStop(0.8, "rgba(30,96,80,0.13)"); // jade dusk
   grd.addColorStop(1.0, "rgba(16,44,40,0)");
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
@@ -707,17 +735,37 @@ function renderBoard(flashTs) {
     .join("");
 }
 
-// Spit coins out of the register's mouth. `powMul` scales launch power, `spread`
-// widens the fan. Shared by the normal burst and the jackpot torrent.
+// Shared till geometry (drawDrawer + dispenseCoins agree on it): the drawer
+// slides down+out from the register body by `state.drawer` (0 shut → 1 ejected).
+function drawerGeom(g) {
+  const { bx, by, bw, bh, s } = g;
+  const open = clamp(state.drawer, 0, 1.12);
+  const dw = bw * 0.86;
+  const dh = 34 * s;
+  const x = bx + (bw - dw) / 2;
+  const restY = by + bh - 30 * s; // closed: front face tucked under the body
+  const faceY = restY + open * 56 * s; // front face top edge, slid out
+  const backY = restY + 2 * s; // hinge line where the open tray meets the body
+  return { open, dw, dh, x, restY, faceY, backY, s, cx: g.cx };
+}
+// Where coins erupt from: the open till's front lip.
+function drawerMouth(g) {
+  const d = drawerGeom(g);
+  return { x: d.cx, y: d.faceY + 2 * d.s, halfW: d.dw * 0.4 };
+}
+
+// Spit coins out of the open till's front lip. `powMul` scales launch power,
+// `spread` widens the fan. Shared by the normal burst and the jackpot torrent.
 function dispenseCoins(g, count, powMul, spread) {
-  const mouthX = g.cx;
-  const mouthY = g.by + g.bh * 0.72;
+  const m = drawerMouth(g);
+  const mouthX = m.x;
+  const mouthY = m.y;
   for (let i = 0; i < count; i++) {
     const ang = -Math.PI / 2 + rand(-0.9, 0.9) * spread;
     const power = rand(5, 11) * powMul;
     coins.push({
-      x: mouthX + rand(-30, 30) * g.s,
-      y: mouthY,
+      x: mouthX + rand(-m.halfW, m.halfW),
+      y: mouthY + rand(-4, 4) * g.s,
       vx: Math.cos(ang) * power + rand(-2, 2),
       vy: Math.sin(ang) * power - rand(2, 5),
       r: rand(9, 16) * g.s,
@@ -739,7 +787,7 @@ function triggerJackpot(now, profile) {
   state.shake = Math.max(state.shake, 36);
   state.glow = 1;
   state.bell = 1;
-  state.drawer = 1;
+  state.drawerV = Math.max(state.drawerV, 0.9); // slam the till out hard
   state.lever = 1; // yank again as the coins explode
   state.leverV = 0;
   const g = geom();
@@ -785,7 +833,7 @@ function fireBurst(d) {
   const recordBoost = isTopRecord ? 1.5 : 1;
   state.shake = Math.max(state.shake, (6 + inten * 26) * recordBoost);
   state.glow = 1;
-  state.drawer = 1;
+  state.drawerV = Math.max(state.drawerV, 0.5 + inten * 0.4); // kick the till out, harder on big turns
   state.bell = 1;
 
   // cha-ching yanks the slot lever (see step()'s lever spring + drawLever)
@@ -852,7 +900,19 @@ function step(dt, now) {
   state.shake *= Math.pow(0.86, dt);
   state.glow *= Math.pow(0.94, dt);
   state.bell *= Math.pow(0.9, dt);
-  state.drawer += ((coins.length > 0 ? 1 : 0) - state.drawer) * 0.1 * dt;
+  // till spring: a burst kicks state.drawerV positive (see fireBurst); the till
+  // springs toward "out" (1) while coins are still flying, then snaps shut once
+  // they drain, overshooting slightly into a ka-chunk bounce against the body.
+  const drawerTarget = coins.length > 12 ? 1 : 0;
+  state.drawerV += (drawerTarget - state.drawer) * 0.14 * dt;
+  state.drawerV *= Math.pow(0.78, dt);
+  state.drawer += state.drawerV * dt;
+  if (state.drawer < 0) {
+    // hit the closed stop — bounce back a touch for the ka-chunk
+    state.drawer = 0;
+    state.drawerV = Math.max(0, -state.drawerV * 0.25);
+  }
+  state.drawer = Math.min(state.drawer, 1.12);
 
   // lever spring: a cha-ching sets state.lever=1 (fully pulled); it springs back
   // toward rest with a little recoil overshoot so the red knob visibly snaps.
@@ -1348,36 +1408,121 @@ function drawReels(g, now) {
   ctx.textAlign = "start";
 }
 
+// The cash till: a brass drawer that slides out toward the viewer on a burst,
+// its open top face revealing coin cups + bill bays brimming with money, the
+// front panel riding lowest (closest to us). All driven by `state.drawer`.
 function drawDrawer(g) {
-  const { bx, by, bw, bh, s } = g;
-  const open = state.drawer;
-  const dw = bw * 0.86,
-    dh = 34 * s;
-  const x = bx + (bw - dw) / 2;
-  const y = by + bh - 24 * s + open * 26 * s;
-  // brass drawer face with a green inset
-  ctx.fillStyle = brassFill(x, y, y + dh);
-  rr(x, y, dw, dh, 6 * s);
+  const d = drawerGeom(g);
+  const { open, dw, dh, x, faceY, backY, s, cx } = d;
+  const fy = faceY;
+
+  // ── open till tray (perspective top face) — only while it's pulled out ──
+  if (open > 0.04) {
+    const inset = 16 * s; // the opening narrows toward the back (perspective)
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const trayPt = (u, v) => {
+      const left = lerp(x + inset, x, v);
+      const right = lerp(x + dw - inset, x + dw, v);
+      return [lerp(left, right, u), lerp(backY, fy, v)];
+    };
+    const reveal = clamp(open * 1.3, 0, 1); // contents fade in as it opens
+    const p0 = trayPt(0, 0),
+      p1 = trayPt(1, 0),
+      p2 = trayPt(1, 1),
+      p3 = trayPt(0, 1);
+    const trayPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.lineTo(p3[0], p3[1]);
+      ctx.closePath();
+    };
+
+    ctx.save();
+    // green felt floor of the till
+    trayPath();
+    const fg = ctx.createLinearGradient(0, backY, 0, fy);
+    fg.addColorStop(0, "#0a3526");
+    fg.addColorStop(1, "#11543c");
+    ctx.fillStyle = fg;
+    ctx.fill();
+    ctx.clip(); // keep cups, bills and glow inside the tray
+
+    // warm cavity glow welling up from inside the register
+    const gg = ctx.createLinearGradient(0, backY, 0, fy);
+    gg.addColorStop(0, `rgba(255,210,110,${0.4 * reveal})`);
+    gg.addColorStop(1, "rgba(255,210,110,0)");
+    ctx.fillStyle = gg;
+    ctx.fillRect(x, backY, dw, fy - backY);
+
+    // coin cups (back row): dark wells each cradling a gold coin
+    for (let i = 0; i < 5; i++) {
+      const [ccx, ccy] = trayPt(0.13 + i * 0.185, 0.3);
+      const rw = dw * 0.07,
+        rh = rw * 0.5;
+      ctx.fillStyle = "rgba(0,0,0,0.32)";
+      ctx.beginPath();
+      ctx.ellipse(ccx, ccy, rw, rh, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,206,80,${0.92 * reveal})`;
+      ctx.beginPath();
+      ctx.ellipse(ccx, ccy - rh * 0.3, rw * 0.72, rh * 0.72, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,243,196,${0.7 * reveal})`;
+      ctx.beginPath();
+      ctx.ellipse(ccx - rw * 0.2, ccy - rh * 0.5, rw * 0.26, rh * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // bill bays (front): longitudinal slots with green banknotes peeking out
+    const quad = (a, b, c, e) => {
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.lineTo(c[0], c[1]);
+      ctx.lineTo(e[0], e[1]);
+      ctx.closePath();
+    };
+    for (let i = 0; i < 4; i++) {
+      const uL = 0.08 + i * 0.225,
+        uR = uL + 0.17;
+      quad(trayPt(uL, 0.52), trayPt(uR, 0.52), trayPt(uR, 0.95), trayPt(uL, 0.95));
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.fill();
+      quad(trayPt(uL + 0.02, 0.6), trayPt(uR - 0.02, 0.6), trayPt(uR - 0.02, 0.88), trayPt(uL + 0.02, 0.88));
+      ctx.fillStyle = `rgba(60,150,96,${0.88 * reveal})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(185,255,212,${0.5 * reveal})`;
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // brass rim framing the open mouth
+    trayPath();
+    ctx.strokeStyle = brassStroke();
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+  }
+
+  // ── drawer front panel (rides lowest, closest to the viewer) ──
+  ctx.fillStyle = brassFill(x, fy, fy + dh);
+  rr(x, fy, dw, dh, 6 * s);
   ctx.fill();
   ctx.strokeStyle = brassStroke();
   ctx.lineWidth = 2 * s;
   ctx.stroke();
-  const ig = ctx.createLinearGradient(x, y, x, y + dh);
+  const ig = ctx.createLinearGradient(x, fy, x, fy + dh);
   ig.addColorStop(0, "#14543f");
   ig.addColorStop(1, "#0c3325");
   ctx.fillStyle = ig;
-  rr(x + 8 * s, y + 6 * s, dw - 16 * s, dh - 12 * s, 4 * s);
+  rr(x + 8 * s, fy + 6 * s, dw - 16 * s, dh - 12 * s, 4 * s);
   ctx.fill();
   // handle
   ctx.fillStyle = "#ffe9a8";
-  rr(x + dw / 2 - 24 * s, y + dh / 2 - 3 * s, 48 * s, 6 * s, 3 * s);
+  rr(x + dw / 2 - 24 * s, fy + dh / 2 - 3 * s, 48 * s, 6 * s, 3 * s);
   ctx.fill();
-  // open cavity glow
-  if (open > 0.05) {
-    ctx.fillStyle = `rgba(255,207,63,${0.18 * open})`;
-    rr(x + 6 * s, y - 10 * s * open, dw - 12 * s, 12 * s * open, 4 * s);
-    ctx.fill();
-  }
 }
 
 function drawLever(g, now) {
