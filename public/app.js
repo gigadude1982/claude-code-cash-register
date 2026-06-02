@@ -18,6 +18,7 @@ const el = {
   tabTokens: document.getElementById("tab-tokens"),
   tabCost: document.getElementById("tab-cost"),
   lastEvent: document.getElementById("last-event"),
+  version: document.getElementById("version"),
   connDot: document.getElementById("conn-dot"),
   soundGate: document.getElementById("sound-gate"),
   enableSound: document.getElementById("enable-sound"),
@@ -267,17 +268,17 @@ function drawVault(g) {
   const roadHalfBottom = Math.min(W * 0.62, W / 2 - 10);
   const halfAt = (y) => roadHalfBottom * clamp((y - horizonY) / (H - horizonY), 0, 1);
 
-  // sky → warm horizon
+  // sky → warm horizon, with a green undertone to cool the gold
   const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
   sky.addColorStop(0, "#0c0f1a");
-  sky.addColorStop(0.6, "#3a2a10");
-  sky.addColorStop(1, "#8a5e1c");
+  sky.addColorStop(0.6, "#22300f");
+  sky.addColorStop(1, "#6f7322");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, horizonY);
-  // dark ground either side of the road
+  // dark mossy-green ground either side of the road
   const gnd = ctx.createLinearGradient(0, horizonY, 0, H);
-  gnd.addColorStop(0, "#33260b");
-  gnd.addColorStop(1, "#0d0a04");
+  gnd.addColorStop(0, "#1c3a1e");
+  gnd.addColorStop(1, "#07120a");
   ctx.fillStyle = gnd;
   ctx.fillRect(0, horizonY, W, H - horizonY);
   // sun glow at the vanishing point (warmer + a little brighter)
@@ -574,11 +575,11 @@ function drawSunsetAura() {
   const R = Math.max(W, H) * (0.62 + state.glow * 0.08); // swells a touch on a win
   const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
   grd.addColorStop(0.0, "rgba(255,247,214,0.92)"); // white-gold core
-  grd.addColorStop(0.16, "rgba(255,214,120,0.64)"); // gold
-  grd.addColorStop(0.34, "rgba(255,150,66,0.4)"); // orange
-  grd.addColorStop(0.55, "rgba(229,86,84,0.24)"); // rose-red
-  grd.addColorStop(0.78, "rgba(120,52,108,0.12)"); // dusk purple
-  grd.addColorStop(1.0, "rgba(40,20,60,0)");
+  grd.addColorStop(0.16, "rgba(255,214,120,0.6)"); // gold
+  grd.addColorStop(0.34, "rgba(150,205,96,0.4)"); // green-gold
+  grd.addColorStop(0.55, "rgba(56,168,104,0.26)"); // emerald
+  grd.addColorStop(0.78, "rgba(30,96,80,0.13)"); // jade dusk
+  grd.addColorStop(1.0, "rgba(16,44,40,0)");
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
 }
@@ -1696,7 +1697,9 @@ function connect() {
   es.addEventListener("hello", (e) => {
     el.connDot.classList.add("live");
     try {
-      applyState(JSON.parse(e.data));
+      const data = JSON.parse(e.data);
+      if (data.version) el.version.textContent = ` · v${data.version}`;
+      applyState(data);
     } catch {}
   });
   es.addEventListener("state", (e) => {
