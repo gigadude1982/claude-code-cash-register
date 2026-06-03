@@ -904,7 +904,7 @@ function step(dt, now) {
   // till spring: a burst kicks state.drawerV positive (see fireBurst); the till
   // springs toward "out" (1) while coins are still flying, then snaps shut once
   // they drain, overshooting slightly into a ka-chunk bounce against the body.
-  const drawerTarget = coins.length > 12 ? 1 : 0;
+  const drawerTarget = coins.length > 0 ? 1 : 0;
   state.drawerV += (drawerTarget - state.drawer) * 0.14 * dt;
   state.drawerV *= Math.pow(0.78, dt);
   state.drawer += state.drawerV * dt;
