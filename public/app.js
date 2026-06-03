@@ -580,16 +580,17 @@ function drawSunsetAura() {
   ctx.globalCompositeOperation = "lighter"; // additive, so overlaps blaze brighter
   const rayCount = 20;
   const rayLen = Math.max(W, H) * (0.9 + state.glow * 0.2);
+  const baseRayGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rayLen);
+  baseRayGrad.addColorStop(0, "rgba(255,240,176,1)");
+  baseRayGrad.addColorStop(0.5, "rgba(255,205,90,0.45)");
+  baseRayGrad.addColorStop(1, "rgba(255,196,86,0)");
   for (let i = 0; i < rayCount; i++) {
     const a = (i / rayCount) * Math.PI * 2 + t * 0.05; // slow wheel
     const pulse = 0.5 + 0.5 * Math.sin(t * 0.9 + i * 1.7); // each beam breathes
     const halfW = (0.018 + 0.016 * pulse) * Math.PI; // angular half-width
     const alpha = (0.05 + 0.07 * pulse) * (0.75 + state.glow * 0.6);
-    const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rayLen);
-    rg.addColorStop(0, `rgba(255,240,176,${alpha})`);
-    rg.addColorStop(0.5, `rgba(255,205,90,${alpha * 0.45})`);
-    rg.addColorStop(1, "rgba(255,196,86,0)");
-    ctx.fillStyle = rg;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = baseRayGrad;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, rayLen, a - halfW, a + halfW);
