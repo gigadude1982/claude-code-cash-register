@@ -38,6 +38,13 @@ No external dependencies — pure Node built-ins.
   horizon, gold-bar stacks on the verge, and coins endlessly raining from the sky.
 - **Dollar cost** per turn and cumulative, using approximate Anthropic per-model
   list prices (Opus / Sonnet / Haiku), shown on the register and in the HUD.
+- **Daily budget tint** — click the `today:` pill to set a daily spend target
+  (persisted in `localStorage`, or pass `?budget=N`). The pill stays gold, warms
+  **amber at 75%**, then blazes **red** once you're over — a quiet at-a-glance
+  burn gauge. Click again to change or clear it.
+- **HUD sparkline** — a tiny trend line of your most recent turn sizes (tokens)
+  next to the totals, so you can see at a glance whether turns are getting
+  heavier or lighter.
 - **Persistent totals** — session / today / all-time tokens + cost survive
   restarts (`data/stats.json`), tracked **combined and per-profile** (a left-hand
   scoreboard breaks down each profile's session/today/all-time).
@@ -127,6 +134,8 @@ npm run test:burst 1500
 - `http://127.0.0.1:4337/?board=cost` — open straight to the cost leaderboard
 - `http://127.0.0.1:4337/?nogate` — skip the click-to-enable-sound overlay (for
   an always-on, muted dashboard on a second monitor)
+- `http://127.0.0.1:4337/?budget=20` — set the daily spend budget to `$20` (tints
+  the `today:` pill amber→red as you approach it); persists for next time
 
 ## Configuration
 
