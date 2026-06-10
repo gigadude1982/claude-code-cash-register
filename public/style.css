@@ -141,6 +141,9 @@ main {
   left: 16px;
   width: 240px;
   max-width: 40vw;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #11161fee, #0a0d13ee);
   border: 1px solid #ffffff1f;
   border-radius: 14px;
@@ -155,11 +158,29 @@ main {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink);
+  flex: none;
 }
 #profiles-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-right: -6px;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff33 transparent;
+}
+#profiles-list::-webkit-scrollbar {
+  width: 6px;
+}
+#profiles-list::-webkit-scrollbar-thumb {
+  background: #ffffff33;
+  border-radius: 999px;
+}
+#profiles-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 #profiles-list .prow {
   border-left: 3px solid var(--pc, #888);
@@ -195,6 +216,9 @@ main {
   right: 16px;
   width: 250px;
   max-width: 40vw;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #1c1708ee, #120e04ee);
   border: 1px solid #ffcf3f55;
   border-radius: 14px;
@@ -209,6 +233,7 @@ main {
   justify-content: space-between;
   margin-bottom: 8px;
   gap: 8px;
+  flex: none;
 }
 #leaderboard h2 {
   margin: 0;
@@ -246,6 +271,24 @@ main {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* keep ranked rows clear of the rounded panel edge while scrolling */
+  margin-right: -6px;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #ffcf3f66 transparent;
+}
+#board-list::-webkit-scrollbar {
+  width: 6px;
+}
+#board-list::-webkit-scrollbar-thumb {
+  background: #ffcf3f66;
+  border-radius: 999px;
+}
+#board-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 #board-list li {
   counter-increment: rank;
