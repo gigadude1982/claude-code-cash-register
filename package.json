@@ -1,6 +1,6 @@
 {
   "name": "claude-code-cash-register",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "An animated slot-machine cash register that cha-chings every time Claude Code spends tokens.",
   "type": "module",
