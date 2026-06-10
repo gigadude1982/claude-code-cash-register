@@ -14,7 +14,11 @@ const el = {
   today: document.getElementById("today"),
   alltime: document.getElementById("alltime"),
   board: document.getElementById("board-list"),
+  leaderboard: document.getElementById("leaderboard"),
+  profiles: document.getElementById("profiles"),
   profilesList: document.getElementById("profiles-list"),
+  sparkPill: document.getElementById("spark-pill"),
+  sparkline: document.getElementById("sparkline"),
   tabTokens: document.getElementById("tab-tokens"),
   tabCost: document.getElementById("tab-cost"),
   lastEvent: document.getElementById("last-event"),
@@ -73,6 +77,9 @@ const state = {
   boards: { tokens: [], cost: [] }, // leaderboards by view
   boardView: "tokens",
   day: null,
+  todayCost: 0, // today's running $ spend, for the budget tint
+  dailyBudget: 0, // 0 = no budget set; tints the today pill amber→red
+  spark: [], // recent per-turn token counts, oldest→newest (sparkline)
   // animation
   shake: 0,
   glow: 0, // 0..1 register glow
@@ -680,7 +687,11 @@ function applyState(d) {
       state.sessionTotal = t.session.tokens;
       state.sessionCost = t.session.cost;
     }
-    if (t.today) el.today.textContent = `today: ${fmt(t.today.tokens)} tok · ${usd(t.today.cost)}`;
+    if (t.today) {
+      state.todayCost = Number(t.today.cost) || 0;
+      el.today.textContent = `today: ${fmt(t.today.tokens)} tok · ${usd(t.today.cost)}`;
+      applyBudgetTint();
+    }
     if (t.allTime) el.alltime.textContent = `all-time: ${fmt(t.allTime.tokens)} tok · ${usd(t.allTime.cost)}`;
     if (t.profiles) renderProfiles(t.profiles);
   }
@@ -707,6 +718,24 @@ function renderProfiles(list) {
       );
     })
     .join("");
+  refreshScrollFades();
+}
+
+// Toggle each panel's `.can-scroll-down` class so its bottom fade + ▾ chevron
+// (style.css) only appears while there are more rows below the fold. Run on
+// scroll, resize, and after every re-render. rAF-deferred so the DOM has laid
+// out the freshly-rendered list before we measure it.
+function refreshScrollFades() {
+  requestAnimationFrame(() => {
+    for (const [panel, list] of [
+      [el.leaderboard, el.board],
+      [el.profiles, el.profilesList],
+    ]) {
+      if (!panel || !list) continue;
+      const more = list.scrollHeight - list.scrollTop - list.clientHeight > 4;
+      panel.classList.toggle("can-scroll-down", more);
+    }
+  });
 }
 
 function setBoardView(view) {
@@ -721,6 +750,7 @@ function renderBoard(flashTs) {
   const list = state.boards[state.boardView] || [];
   if (!list.length) {
     el.board.innerHTML = `<li class="empty">No jackpots yet — go spend some tokens.</li>`;
+    refreshScrollFades();
     return;
   }
   el.board.innerHTML = list
@@ -734,6 +764,92 @@ function renderBoard(flashTs) {
       return `<li class="${flash.trim()}"><span class="toks">${primary}</span><span class="meta">${meta}</span>${label}</li>`;
     })
     .join("");
+  refreshScrollFades();
+}
+
+// ── daily budget tint (#today pill) ──────────────────────────────────────────
+// A click on the today pill sets a soft daily $ target stored in localStorage;
+// the pill stays gold under ~75% of it, warms to amber, then blazes red over.
+function applyBudgetTint() {
+  const b = state.dailyBudget;
+  el.today.classList.remove("budget-warn", "budget-over");
+  if (b > 0) {
+    const frac = state.todayCost / b;
+    if (frac >= 1) el.today.classList.add("budget-over");
+    else if (frac >= 0.75) el.today.classList.add("budget-warn");
+    el.today.title = `Daily budget ${usd(b)} — ${usd(state.todayCost)} spent (${Math.round(frac * 100)}%). Click to change.`;
+  } else {
+    el.today.title = "Click to set a daily budget";
+  }
+}
+function setDailyBudget(v) {
+  state.dailyBudget = Number(v) > 0 ? Number(v) : 0;
+  try {
+    if (state.dailyBudget > 0) localStorage.setItem("ccr-daily-budget", String(state.dailyBudget));
+    else localStorage.removeItem("ccr-daily-budget");
+  } catch {}
+  applyBudgetTint();
+}
+function promptDailyBudget() {
+  const cur = state.dailyBudget > 0 ? String(state.dailyBudget) : "";
+  const ans = window.prompt("Daily spend budget in dollars (blank to clear):", cur);
+  if (ans === null) return; // cancelled
+  const n = parseFloat(ans.replace(/[^0-9.]/g, ""));
+  setDailyBudget(Number.isFinite(n) ? n : 0);
+}
+
+// ── sparkline: recent per-turn token counts in a tiny HUD canvas ─────────────
+const SPARK_MAX = 30;
+function pushSpark(tokens) {
+  state.spark.push(Math.max(0, tokens));
+  if (state.spark.length > SPARK_MAX) state.spark.shift();
+  drawSparkline();
+}
+function drawSparkline() {
+  const cv = el.sparkline;
+  if (!cv) return;
+  const data = state.spark;
+  if (data.length < 2) {
+    el.sparkPill.classList.add("empty"); // nothing meaningful to show yet
+    return;
+  }
+  el.sparkPill.classList.remove("empty");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = cv.clientWidth || 72;
+  const ch = cv.clientHeight || 18;
+  const w = Math.round(cw * dpr);
+  const h = Math.round(ch * dpr);
+  if (cv.width !== w || cv.height !== h) {
+    cv.width = w;
+    cv.height = h;
+  }
+  const c = cv.getContext("2d");
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, cw, ch);
+  const max = Math.max(...data, 1);
+  const pad = 2;
+  const x = (i) => pad + (i / (data.length - 1)) * (cw - pad * 2);
+  const y = (v) => ch - pad - (v / max) * (ch - pad * 2);
+  // soft gold area fill under the line
+  c.beginPath();
+  c.moveTo(x(0), ch);
+  data.forEach((v, i) => c.lineTo(x(i), y(v)));
+  c.lineTo(x(data.length - 1), ch);
+  c.closePath();
+  c.fillStyle = "rgba(255,207,63,0.18)";
+  c.fill();
+  // the trend line
+  c.beginPath();
+  data.forEach((v, i) => (i ? c.lineTo(x(i), y(v)) : c.moveTo(x(i), y(v))));
+  c.strokeStyle = "#ffcf3f";
+  c.lineWidth = 1.5;
+  c.lineJoin = "round";
+  c.stroke();
+  // dot on the latest point
+  c.beginPath();
+  c.arc(x(data.length - 1), y(data[data.length - 1]), 1.8, 0, Math.PI * 2);
+  c.fillStyle = "#ffe9a8";
+  c.fill();
 }
 
 // Shared till geometry (drawDrawer + dispenseCoins agree on it): the drawer
@@ -805,6 +921,7 @@ function triggerJackpot(now, profile) {
 function fireBurst(d) {
   const tokens = Math.max(0, Math.round(d.turnTokens || 0));
   if (tokens <= 0) return;
+  pushSpark(tokens); // track turn size for the HUD sparkline (even while dormant)
   // Dormant: keep the board totals current, bank the spend for a catch-up
   // burst, but fire none of the animation/sound until the register is armed.
   if (!armed) {
@@ -1765,6 +1882,8 @@ function onNewDay(d) {
   state.day = d.date;
   // today's running total resets to zero at the rollover
   el.today.textContent = `today: 0 tok · $0.00`;
+  state.todayCost = 0;
+  applyBudgetTint();
   if (!armed) return; // dormant: roll the day silently, no popup/chime
   const prev = d.previous || { tokens: 0, cost: 0 };
   state.popup = {
@@ -1942,6 +2061,20 @@ el.clearAlert.addEventListener("click", (e) => {
   e.stopPropagation();
   stopAlert();
 });
+// click the today pill to set/clear a daily spend budget
+el.today.addEventListener("click", (e) => {
+  e.stopPropagation();
+  promptDailyBudget();
+});
+// keep the scroll fades + sparkline correct when a panel scrolls or the window
+// resizes (the panels' max-height is viewport-relative, so what's "below the
+// fold" changes with height).
+el.board.addEventListener("scroll", refreshScrollFades, { passive: true });
+el.profilesList.addEventListener("scroll", refreshScrollFades, { passive: true });
+window.addEventListener("resize", () => {
+  refreshScrollFades();
+  drawSparkline();
+});
 // allow muted viewing too: Escape arms the register without enabling sound
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") arm();
@@ -1967,6 +2100,16 @@ const forceBoth = params.has("muted");
 setMuteChaching((savedCha != null ? savedCha === "1" : legacyMuted) || forceBoth || muteParam === "chaching");
 setMuteBuzzer((savedBuz != null ? savedBuz === "1" : legacyMuted) || forceBoth || muteParam === "buzzer");
 
+// daily budget: ?budget=20 overrides (and persists) the saved value.
+let savedBudget = 0;
+try {
+  savedBudget = parseFloat(localStorage.getItem("ccr-daily-budget")) || 0;
+} catch {}
+const budgetParam = parseFloat(params.get("budget"));
+if (Number.isFinite(budgetParam)) setDailyBudget(budgetParam);
+else setDailyBudget(savedBudget);
+
 resize();
+drawSparkline(); // hidden until ≥2 turns have landed
 requestAnimationFrame(frame);
 connect();

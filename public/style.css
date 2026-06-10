@@ -92,6 +92,49 @@ body {
   box-shadow: inset 0 0 8px #ffcf3f22;
 }
 
+/* daily-budget tint on the today pill (click it to set a target). Stays gold
+   until ~75% of the day's budget, warms to amber, then blazes red once over. */
+#today {
+  cursor: pointer;
+}
+#today.budget-warn {
+  color: #ffd9a0;
+  border-color: var(--warn);
+  background: linear-gradient(180deg, #2e2206, #1d1503);
+  box-shadow: inset 0 0 8px #ffb45433;
+}
+#today.budget-over {
+  color: #ffd2d7;
+  border-color: var(--bad);
+  background: linear-gradient(180deg, #2e0f12, #1d0709);
+  box-shadow: inset 0 0 10px #ff5d6c44;
+  animation: budgetpulse 1.6s ease-in-out infinite;
+}
+@keyframes budgetpulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 10px #ff5d6c33;
+  }
+  50% {
+    box-shadow: inset 0 0 16px #ff5d6c77, 0 0 10px #ff5d6c55;
+  }
+}
+
+/* sparkline pill — a tiny trend of recent turn sizes next to the totals */
+.pill.spark {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+}
+.pill.spark canvas {
+  display: block;
+  width: 72px;
+  height: 18px;
+}
+.pill.spark.empty {
+  display: none;
+}
+
 /* mute toggle lives among the HUD pills */
 .pill.mute {
   cursor: pointer;
@@ -242,12 +285,15 @@ main {
   text-transform: uppercase;
   color: var(--gold);
   text-shadow: 0 0 10px #ffcf3f55;
+  /* allow the title to shrink/wrap so the Tokens/Cost toggle is never clipped */
+  min-width: 0;
 }
 .board-toggle {
   display: flex;
   border: 1px solid #ffcf3f44;
   border-radius: 999px;
   overflow: hidden;
+  flex: none; /* hold full width; the heading yields space instead */
 }
 .board-toggle button {
   font: inherit;
@@ -290,6 +336,40 @@ main {
 #board-list::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* scroll affordance — a soft fade + ▾ chevron at a panel's bottom edge, shown
+   only while its list has more rows below the fold (app.js toggles
+   .can-scroll-down on scroll/resize/re-render). */
+#leaderboard::after,
+#profiles::after {
+  content: "▾";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 30px;
+  border-radius: 0 0 12px 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 1px;
+  font-size: 11px;
+  color: var(--dim);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+#leaderboard::after {
+  background: linear-gradient(180deg, #120e0400, #120e04ee 72%);
+}
+#profiles::after {
+  background: linear-gradient(180deg, #0a0d1300, #0a0d13ee 72%);
+}
+#leaderboard.can-scroll-down::after,
+#profiles.can-scroll-down::after {
+  opacity: 1;
+}
+
 #board-list li {
   counter-increment: rank;
   display: grid;
@@ -536,4 +616,39 @@ main {
 }
 #enable-sound:hover {
   background: #243057;
+}
+
+/* ── narrow viewports: the side panels float over the canvas, so on a skinny
+   window shrink them and let them fade back so they stop crowding the register.
+   Hover / focus (or a touch) brings the panel fully forward again. ───────── */
+@media (max-width: 760px) {
+  #profiles,
+  #leaderboard {
+    width: 200px;
+    max-width: 46vw;
+    padding: 10px 11px;
+    font-size: 12px;
+    opacity: 0.78;
+    transition: opacity 0.2s;
+  }
+  #profiles:hover,
+  #profiles:focus-within,
+  #leaderboard:hover,
+  #leaderboard:focus-within {
+    opacity: 1;
+  }
+  .hud-right {
+    gap: 6px;
+  }
+  /* the recent-turns sparkline is a nicety — drop it first when space is tight */
+  .pill.spark {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  #profiles,
+  #leaderboard {
+    width: 168px;
+    max-width: 44vw;
+  }
 }
