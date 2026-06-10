@@ -817,9 +817,11 @@ function drawSparkline() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cw = cv.clientWidth || 72;
   const ch = cv.clientHeight || 18;
-  if (cv.width !== Math.round(cw * dpr)) {
-    cv.width = Math.round(cw * dpr);
-    cv.height = Math.round(ch * dpr);
+  const w = Math.round(cw * dpr);
+  const h = Math.round(ch * dpr);
+  if (cv.width !== w || cv.height !== h) {
+    cv.width = w;
+    cv.height = h;
   }
   const c = cv.getContext("2d");
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
